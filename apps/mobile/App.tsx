@@ -1,7 +1,7 @@
 import { ClerkLoaded, ClerkProvider, SignedIn, SignedOut } from '@clerk/clerk-expo';
 import { StatusBar } from 'expo-status-bar';
 import { SignInScreen } from './src/SignInScreen';
-import { HomeScreen } from './src/HomeScreen';
+import { AuthedApp } from './src/AuthedApp';
 import { tokenCache } from './src/tokenCache';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
@@ -15,7 +15,7 @@ export default function App() {
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ClerkLoaded>
         <SignedIn>
-          <HomeScreen />
+          <AuthedApp />
         </SignedIn>
         <SignedOut>
           <SignInScreen />

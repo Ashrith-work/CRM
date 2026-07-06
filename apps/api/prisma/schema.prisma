@@ -27,6 +27,22 @@ model Organization {
   teamMemberships TeamMembership[]
   auditLogs       AuditLog[]
 
+  // Milestone 1 — CRM data model.
+  companies              Company[]
+  contacts               Contact[]
+  leads                  Lead[]
+  tags                   Tag[]
+  taggables              Taggable[]
+  notes                  Note[]
+  customFieldDefinitions CustomFieldDefinition[]
+  activityEvents         ActivityEvent[]
+
+  // Milestone 2 — revenue layer.
+  pipelines      Pipeline[]
+  stages         Stage[]
+  deals          Deal[]
+  stageHistories StageHistory[]
+
   @@index([slug])
 }
 
@@ -141,4 +157,321 @@ model AuditLog {
 
   @@index([organizationId])
   @@index([organizationId, createdAt])
+}
+
+// ============================================================================
+// Milestone 1 — CRM core data model.
+// Invariant (unchanged): every table carries organizationId; all lists filter
+// deletedAt = null. ownerId / authorId / actorId hold a User.id but are stored
+// as plain scalars (soft references) to avoid a web of User back-relations.
+// ============================================================================
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+}
+
+/** First-class CRM entities that can carry tags, notes, custom fields, and
+ * activity. DEAL added in Milestone 2. */
+enum EntityType {
+  CONTACT
+  COMPANY
+  LEAD
+  DEAL
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+  SELECT
+}
+
+enum ActivityEventType {
+  CREATED
+  UPDATED
+  NOTE_ADDED
+  TAG_ADDED
+  STATUS_CHANGED
+  CONVERTED
+  // Milestone 2 — deals.
+  STAGE_CHANGED
+  WON
+  LOST
+  REOPENED
+}
+
+model Company {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  domain         String?
+  industry       String?
+  size           String?
+  website        String?
+  phone          String?
+  addressJson    Json?
+  ownerId        String?
+  customFields   Json      @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts     Contact[]
+  deals        Deal[]
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, ownerId])
+  @@index([organizationId, name])
+}
+
+model Contact {
+  id             String    @id @default(cuid())
+  organizationId String
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  jobTitle       String?
+  companyId      String?
+  ownerId        String?
+  customFields   Json      @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company            Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  // Leads that converted into this contact (see Lead.convertedContactId).
+  convertedFromLeads Lead[]       @relation("LeadConvertedContact")
+  deals              Deal[]
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, email])
+  @@index([organizationId, ownerId])
+  @@index([companyId])
+}
+
+model Lead {
+  id                 String     @id @default(cuid())
+  organizationId     String
+  firstName          String
+  lastName           String
+  email              String?
+  phone              String?
+  source             String?
+  status             LeadStatus @default(NEW)
+  ownerId            String?
+  convertedContactId String?
+  customFields       Json       @default("{}")
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  convertedContact Contact?     @relation("LeadConvertedContact", fields: [convertedContactId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, status])
+  @@index([organizationId, email])
+  @@index([organizationId, ownerId])
+}
+
+model Tag {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  color          String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taggables    Taggable[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+/** Join row assigning a Tag to an entity. Hard-deleted on untag (no deletedAt)
+ * so the uniqueness constraint stays clean and re-tagging is always allowed. */
+model Taggable {
+  id             String     @id @default(cuid())
+  organizationId String
+  tagId          String
+  entityType     EntityType
+  entityId       String
+  createdAt      DateTime   @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tag          Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, entityType, entityId])
+  @@index([organizationId, entityType, entityId])
+}
+
+model Note {
+  id             String    @id @default(cuid())
+  organizationId String
+  entityType     EntityType
+  entityId       String
+  authorId       String
+  body           String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, entityType, entityId, createdAt])
+}
+
+model CustomFieldDefinition {
+  id             String          @id @default(cuid())
+  organizationId String
+  entityType     EntityType
+  key            String
+  label          String
+  fieldType      CustomFieldType
+  options        Json?
+  required       Boolean         @default(false)
+  order          Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, entityType, key])
+  @@index([organizationId, entityType])
+}
+
+/** Append-only domain timeline. Distinct from AuditLog (infra audit): this is
+ * the user-facing activity feed emitted by ActivityService.emit(). */
+model ActivityEvent {
+  id             String            @id @default(cuid())
+  organizationId String
+  entityType     EntityType
+  entityId       String
+  actorId        String?
+  eventType      ActivityEventType
+  metadata       Json?
+  source         String?
+  createdAt      DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, entityType, entityId, createdAt])
+}
+
+// ============================================================================
+// Milestone 2 — revenue layer (Pipelines, Stages, Deals, Stage History).
+// Money is stored as INTEGER minor units (amountMinor) + a currency code —
+// never a float. Stage history is append-only.
+// ============================================================================
+
+enum StageType {
+  OPEN
+  WON
+  LOST
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+model Pipeline {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  isDefault      Boolean   @default(false)
+  position       Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stages       Stage[]
+  deals        Deal[]
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, position])
+}
+
+model Stage {
+  id             String    @id @default(cuid())
+  organizationId String
+  pipelineId     String
+  name           String
+  position       Int       @default(0)
+  probability    Int       @default(0) // 0-100
+  type           StageType @default(OPEN)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline     @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals        Deal[]
+
+  @@index([organizationId, pipelineId, position])
+}
+
+model Deal {
+  id                String     @id @default(cuid())
+  organizationId    String
+  name              String
+  pipelineId        String
+  stageId           String
+  amountMinor       Int        @default(0) // money in minor units (e.g. paise/cents)
+  currency          String     @default("USD")
+  expectedCloseDate DateTime?
+  ownerId           String?
+  contactId         String?
+  companyId         String?
+  status            DealStatus @default(OPEN)
+  closedAt          DateTime?
+  customFields      Json       @default("{}")
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  deletedAt         DateTime?
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage        Stage          @relation(fields: [stageId], references: [id])
+  contact      Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  company      Company?       @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  stageHistory StageHistory[]
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, pipelineId, stageId])
+  @@index([organizationId, ownerId])
+  @@index([organizationId, status])
+  @@index([contactId])
+  @@index([companyId])
+}
+
+/** Append-only record of every stage transition. fromStageId/toStageId are
+ * stored as scalars so history survives stage deletion. */
+model StageHistory {
+  id                     String   @id @default(cuid())
+  organizationId         String
+  dealId                 String
+  fromStageId            String?
+  toStageId              String
+  changedById            String
+  changedAt              DateTime @default(now())
+  secondsInPreviousStage Int?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deal         Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, dealId, changedAt])
 }

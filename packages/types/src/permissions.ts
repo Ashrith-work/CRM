@@ -13,6 +13,27 @@ export const PERMISSIONS = {
   ROLE_READ: 'role:read',
   ROLE_MANAGE: 'role:manage',
   AUDIT_READ: 'audit:read',
+
+  // Milestone 1 — CRM.
+  CONTACT_READ: 'contact:read',
+  CONTACT_MANAGE: 'contact:manage',
+  COMPANY_READ: 'company:read',
+  COMPANY_MANAGE: 'company:manage',
+  LEAD_READ: 'lead:read',
+  LEAD_MANAGE: 'lead:manage',
+  TAG_READ: 'tag:read',
+  TAG_MANAGE: 'tag:manage',
+  NOTE_READ: 'note:read',
+  NOTE_MANAGE: 'note:manage',
+  CUSTOM_FIELD_READ: 'custom_field:read',
+  CUSTOM_FIELD_MANAGE: 'custom_field:manage',
+  ACTIVITY_READ: 'activity:read',
+
+  // Milestone 2 — revenue layer.
+  PIPELINE_READ: 'pipeline:read',
+  PIPELINE_MANAGE: 'pipeline:manage',
+  DEAL_READ: 'deal:read',
+  DEAL_MANAGE: 'deal:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -44,10 +65,38 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.TEAM_MANAGE,
     PERMISSIONS.ROLE_READ,
     PERMISSIONS.AUDIT_READ,
+    // Full CRM management.
+    PERMISSIONS.CONTACT_READ,
+    PERMISSIONS.CONTACT_MANAGE,
+    PERMISSIONS.COMPANY_READ,
+    PERMISSIONS.COMPANY_MANAGE,
+    PERMISSIONS.LEAD_READ,
+    PERMISSIONS.LEAD_MANAGE,
+    PERMISSIONS.TAG_READ,
+    PERMISSIONS.TAG_MANAGE,
+    PERMISSIONS.NOTE_READ,
+    PERMISSIONS.NOTE_MANAGE,
+    PERMISSIONS.CUSTOM_FIELD_READ,
+    PERMISSIONS.CUSTOM_FIELD_MANAGE,
+    PERMISSIONS.ACTIVITY_READ,
+    PERMISSIONS.PIPELINE_READ,
+    PERMISSIONS.PIPELINE_MANAGE,
+    PERMISSIONS.DEAL_READ,
+    PERMISSIONS.DEAL_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
     PERMISSIONS.USER_READ,
     PERMISSIONS.TEAM_READ,
+    // CRM read-only (proves the 403 path on any :manage route).
+    PERMISSIONS.CONTACT_READ,
+    PERMISSIONS.COMPANY_READ,
+    PERMISSIONS.LEAD_READ,
+    PERMISSIONS.TAG_READ,
+    PERMISSIONS.NOTE_READ,
+    PERMISSIONS.CUSTOM_FIELD_READ,
+    PERMISSIONS.ACTIVITY_READ,
+    PERMISSIONS.PIPELINE_READ,
+    PERMISSIONS.DEAL_READ,
   ],
 };
