@@ -1,0 +1,144 @@
+// CRM data model — Milestone 0 (foundation).
+// Invariant: every table carries organizationId so all data is tenant-scoped.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Organization {
+  id         String   @id @default(cuid())
+  clerkOrgId String?  @unique
+  name       String
+  slug       String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users           User[]
+  teams           Team[]
+  roles           Role[]
+  permissions     Permission[]
+  userRoles       UserRole[]
+  teamMemberships TeamMembership[]
+  auditLogs       AuditLog[]
+
+  @@index([slug])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  clerkUserId    String   @unique
+  email          String
+  firstName      String?
+  lastName       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userRoles       UserRole[]
+  teamMemberships TeamMembership[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+model Team {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships  TeamMembership[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  Permission[] @relation("RolePermissions")
+  userRoles    UserRole[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Permission {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String // e.g. "user:read" — see @crm/types PERMISSIONS
+  description    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roles        Role[]       @relation("RolePermissions")
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model UserRole {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  roleId         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([organizationId])
+}
+
+model TeamMembership {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  teamId         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([organizationId])
+}
+
+model AuditLog {
+  id               String   @id @default(cuid())
+  organizationId   String
+  actorUserId      String?
+  actorClerkUserId String?
+  action           String // e.g. "create", "update", "delete"
+  entity           String // e.g. "Team", or the route path
+  entityId         String?
+  before           Json?
+  after            Json?
+  ip               String?
+  userAgent        String?
+  createdAt        DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+}

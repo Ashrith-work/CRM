@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "CRM",
+    "slug": "crm-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "crm",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#274fd6"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.crm.mobile"
+    },
+    "android": {
+      "package": "com.crm.mobile"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": ["expo-secure-store"],
+    "extra": {
+      "clerkPublishableKey": "$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "apiUrl": "$EXPO_PUBLIC_API_URL"
+    }
+  }
+}

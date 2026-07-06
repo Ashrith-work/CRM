@@ -1,0 +1,9 @@
+{
+  "//": "Root config for editor tooling only. Each app/package builds with its own tsconfig via turbo.",
+  "extends": "@crm/config/tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [],
+  "exclude": ["node_modules", "**/dist", "**/.next", "**/.expo"]
+}
