@@ -89,24 +89,41 @@ pnpm db:migrate             # apply migrations (M0 + M1 + M2 + M3 + M4 indexes)
 pnpm db:seed                # org + team + roles + users + sample CRM/deal/task data
 ```
 
-The seed creates an `Acme` org, a `Core Team`, three system roles
-(`owner`/`admin`/`member`), an **owner** user, a read-only **member** user, and
-sample CRM data (companies, contacts, leads, tags, custom-field definitions, a
-note, and activity), sample deals, and **sample tasks** (an overdue follow-up, an
-upcoming call, a meeting — each with a reminder) plus one unread notification, so
-every screen has something to show.
+### Demo seed (realistic fake data)
 
-**Perf seed.** To load contacts for the list P95 test:
+`pnpm db:seed` runs `apps/api/prisma/seed.ts` — a **local-only**, re-runnable
+[faker](https://fakerjs.dev) seed (fixed seed → reproducible) that fills the DB
+with coherent CRM data so every list, timeline, and dashboard has believable
+content on both clients. It **wipes the seeded tables first**, then inserts:
+
+- Two orgs — **Acme Inc** (`acme`, the rich one) + **Globex Partners** (tiny, to
+  prove tenant isolation).
+- Users: 1 **admin** (owner role → org-wide dashboards), 1 **manager** (admin
+  role → team scope), **4 reps** (member role → own scope), all on a team, mostly
+  `Asia/Kolkata`.
+- ~50 companies, ~300 contacts (linked, ~15% with custom fields), ~100 leads
+  (~30% converted), 12 tags, a 6-stage INR pipeline, ~200 deals (owners spread
+  across reps; **amountMinor in integer paise**; ~44% open / ~21% won / ~35%
+  lost → **win rate ≈ 36%**), full **stage_history** per deal, ~500 tasks
+  (overdue / today / upcoming / done, meetings with start-end), activity events,
+  notes, a few reminders + notifications. Timestamps are spread across the last
+  ~10 months (this month **and** last month both have data) so trends are real.
 
 ```bash
-SEED_BULK_CONTACTS=50000 pnpm db:seed   # bulk-inserts 50k contacts (batched)
+pnpm db:seed                 # SMALL (fast local demo) — the default
+SEED_MODE=large pnpm db:seed # LARGE — ~2k companies / ~50k contacts / ~10k deals (batched)
 ```
+
+**Safety:** the seed refuses to run if `NODE_ENV=production` or if `DATABASE_URL`
+does not point at a local/dev host — it wipes tables and is for local testing
+only.
 
 ### Binding the seed to your Clerk identity
 
 `/api/v1/me` looks up the app user by the Clerk `sub` in the token. After you
 sign in once, copy your Clerk **user id** (and optionally **org id**) into
-`apps/api/.env`, then re-run `pnpm db:seed`:
+`apps/api/.env`, then re-run `pnpm db:seed` — it binds your identity to the seed's
+**admin** user (owner role), so you sign in and see the org-wide dashboards:
 
 ```
 SEED_CLERK_USER_ID=user_xxx      # from Clerk Dashboard → Users

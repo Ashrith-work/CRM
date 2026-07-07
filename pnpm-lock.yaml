@@ -81,6 +81,9 @@ importers:
       '@crm/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@faker-js/faker':
+        specifier: ^9.0.0
+        version: 9.9.0
       '@nestjs/cli':
         specifier: ^11.0.0
         version: 11.0.23(@types/node@22.20.0)(prettier@3.9.4)
@@ -1248,6 +1251,10 @@ packages:
   '@expo/xcpretty@4.4.4':
     resolution: {integrity: sha512-4aQzz9vgxcNXFfo/iyNgDDYfsU5XGKKxWxZopw0cVotHiW+U8IJbIxMaxsINs6bHhtkG3StKNPcOrn3eBuxKPw==}
     hasBin: true
+
+  '@faker-js/faker@9.9.0':
+    resolution: {integrity: sha512-OEl393iCOoo/z8bMezRlJu+GlRGlsKbUAN7jKB6LhnKoqKve5DXRpalbItIIcwnCjs1k/FOPjFzcA6Qn+H+YbA==}
+    engines: {node: '>=18.0.0', npm: '>=9.0.0'}
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -8717,6 +8724,8 @@ snapshots:
       '@babel/code-frame': 7.29.7
       chalk: 4.1.2
       js-yaml: 4.3.0
+
+  '@faker-js/faker@9.9.0': {}
 
   '@floating-ui/core@1.7.5':
     dependencies:

@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@crm/config": "workspace:*",
+    "@faker-js/faker": "^9.0.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
