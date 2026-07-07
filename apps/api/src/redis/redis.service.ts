@@ -23,6 +23,30 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Read a cached JSON value. Returns null on a miss OR any Redis error — the
+   * cache is an optimization, never a correctness dependency, so a cache
+   * failure must degrade to a live recompute rather than fail the request.
+   */
+  async cacheGet<T>(key: string): Promise<T | null> {
+    try {
+      const raw = await this.client.get(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch (err) {
+      this.logger.warn(`cacheGet(${key}) failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** Write a JSON value with a TTL (seconds). Swallows errors (best-effort). */
+  async cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+    try {
+      await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+    } catch (err) {
+      this.logger.warn(`cacheSet(${key}) failed: ${(err as Error).message}`);
+    }
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.client.quit();
   }

@@ -22,7 +22,9 @@ export type Screen =
   | { name: 'taskDetail'; id: string }
   | { name: 'quickAddTask'; relatedType?: EntityType; relatedId?: string }
   | { name: 'agenda' }
-  | { name: 'notifications' };
+  | { name: 'notifications' }
+  // Milestone 4 — dashboard glance.
+  | { name: 'performance' };
 
 interface NavValue {
   current: Screen;

@@ -14,6 +14,7 @@ import { TaskDetail } from './screens/TaskDetail';
 import { QuickAddTask } from './screens/QuickAddTask';
 import { Agenda } from './screens/Agenda';
 import { NotificationList } from './screens/NotificationList';
+import { Performance } from './screens/Performance';
 import { usePushRegistration, setTaskTapHandler } from './push';
 
 /** Renders the current screen from the nav stack. */
@@ -48,6 +49,8 @@ function Router(): React.JSX.Element {
       return <Agenda />;
     case 'notifications':
       return <NotificationList />;
+    case 'performance':
+      return <Performance />;
     default:
       return <HomeMenu />;
   }

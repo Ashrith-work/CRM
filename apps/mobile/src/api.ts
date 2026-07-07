@@ -49,6 +49,9 @@ import {
   UnreadCountResponseSchema,
   PushTokenSchema,
   OrgUserListResponseSchema,
+  // Milestone 4 — dashboard.
+  SalesTilesSchema,
+  type SalesTiles,
   type Task,
   type TaskListResponse,
   type AgendaResponse,
@@ -370,4 +373,20 @@ export function unregisterPushToken(token: string, deviceToken: string): Promise
 // --- Users (assignee directory) --------------------------------------------
 export function listUsers(token: string): Promise<OrgUserListResponse> {
   return authedGet(token, API_ROUTES.users, OrgUserListResponseSchema);
+}
+
+// --- Dashboard (M4) ---------------------------------------------------------
+export interface SalesTilesParams {
+  period?: 'today' | 'week' | 'month' | 'quarter';
+  /** 'me' forces own-scope regardless of role (the "My performance" glance). */
+  scope?: 'me';
+}
+
+/** Personal sales tiles for the mobile glance (always own-scoped). */
+export function getSalesTiles(token: string, params: SalesTilesParams = {}): Promise<SalesTiles> {
+  const q = new URLSearchParams();
+  if (params.period) q.set('period', params.period);
+  if (params.scope) q.set('scope', params.scope);
+  const s = q.toString();
+  return authedGet(token, `${API_ROUTES.dashboard}/sales${s ? `?${s}` : ''}`, SalesTilesSchema);
 }

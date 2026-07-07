@@ -39,6 +39,14 @@ export const PERMISSIONS = {
   // per-user and gated by USER_READ (held by every role), not a dedicated key.
   TASK_READ: 'task:read',
   TASK_MANAGE: 'task:manage',
+
+  // Milestone 4 — dashboard/reporting. Three keys select the data scope:
+  //   read      → own metrics (rep)
+  //   read_team → team metrics + team table (manager)
+  //   read_all  → org-wide metrics (owner)
+  DASHBOARD_READ: 'dashboard:read',
+  DASHBOARD_READ_TEAM: 'dashboard:read_team',
+  DASHBOARD_READ_ALL: 'dashboard:read_all',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -90,6 +98,9 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.DEAL_MANAGE,
     PERMISSIONS.TASK_READ,
     PERMISSIONS.TASK_MANAGE,
+    // Admin acts as a team manager for dashboards (team-scoped + team table).
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.DASHBOARD_READ_TEAM,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -108,5 +119,7 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // Reps manage their own activity tasks + follow-ups.
     PERMISSIONS.TASK_READ,
     PERMISSIONS.TASK_MANAGE,
+    // Reps see only their own dashboard metrics (own-scope).
+    PERMISSIONS.DASHBOARD_READ,
   ],
 };

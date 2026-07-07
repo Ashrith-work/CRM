@@ -44,6 +44,7 @@ export function HomeMenu(): React.JSX.Element {
           badge={unreadCount > 0 ? unreadCount : undefined}
           onPress={() => push({ name: 'notifications' })}
         />
+        <MenuItem label="My performance" subtitle="Your sales metrics" onPress={() => push({ name: 'performance' })} />
         <MenuItem label="Pipeline" subtitle="Deals by stage" onPress={() => push({ name: 'pipeline' })} />
         <MenuItem label="Contacts" subtitle="Browse & add people" onPress={() => push({ name: 'list', entity: 'CONTACT' })} />
         <MenuItem label="Companies" subtitle="Browse organizations" onPress={() => push({ name: 'list', entity: 'COMPANY' })} />

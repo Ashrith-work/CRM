@@ -21,6 +21,7 @@ import { DealsModule } from './deals/deals.module';
 import { PushTokensModule } from './push-tokens/push-tokens.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TasksModule } from './tasks/tasks.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -56,6 +57,8 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     PushTokensModule,
     NotificationsModule,
     TasksModule,
+    // Milestone 4 — read-only dashboard/reporting over M1–M3 data.
+    DashboardModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

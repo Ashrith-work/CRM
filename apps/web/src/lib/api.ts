@@ -75,6 +75,14 @@ import {
   TaskListResponseSchema,
   TaskSchema,
   UnreadCountResponseSchema,
+  FunnelResponseSchema,
+  SalesTilesSchema,
+  TeamResponseSchema,
+  TrendsResponseSchema,
+  type FunnelResponse,
+  type SalesTiles,
+  type TeamResponse,
+  type TrendsResponse,
   type AgendaResponse,
   type CompleteTaskInput,
   type CreateTaskInput,
@@ -454,4 +462,37 @@ export function updateMyTimezone(token: string, timezone: string): Promise<{ tim
     method: 'PATCH',
     body: JSON.stringify({ timezone }),
   });
+}
+
+// --- Dashboard / reporting (M4) ---------------------------------------------
+export type DashboardPeriodParams = {
+  period?: 'today' | 'week' | 'month' | 'quarter' | 'custom';
+  from?: string;
+  to?: string;
+};
+
+export function getSalesTiles(
+  token: string,
+  params: DashboardPeriodParams & { pipelineId?: string; scope?: 'auto' | 'me' } = {},
+): Promise<SalesTiles> {
+  return request(token, `${API_ROUTES.dashboard}/sales${qs(params)}`, SalesTilesSchema);
+}
+export function getFunnel(
+  token: string,
+  params: DashboardPeriodParams & { pipelineId: string },
+): Promise<FunnelResponse> {
+  return request(token, `${API_ROUTES.dashboard}/funnel${qs(params)}`, FunnelResponseSchema);
+}
+export function getTeam(token: string, params: DashboardPeriodParams = {}): Promise<TeamResponse> {
+  return request(token, `${API_ROUTES.dashboard}/team${qs(params)}`, TeamResponseSchema);
+}
+export function getTrends(
+  token: string,
+  params: DashboardPeriodParams & {
+    metric?: 'won' | 'created' | 'revenue';
+    interval?: 'week' | 'month';
+    pipelineId?: string;
+  } = {},
+): Promise<TrendsResponse> {
+  return request(token, `${API_ROUTES.dashboard}/trends${qs(params)}`, TrendsResponseSchema);
 }

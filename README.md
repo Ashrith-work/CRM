@@ -1,4 +1,4 @@
-# CRM — Milestones 0 (Foundation) + 1 (Core CRM) + 2 (Revenue) + 3 (Activity)
+# CRM — Milestones 0 (Foundation) + 1 (Core CRM) + 2 (Revenue) + 3 (Activity) + 4 (Dashboard)
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -23,6 +23,14 @@ clients never duplicate it.
 > notification center, and follow-up sections on Contact/Deal pages; mobile
 > registers for push, shows a Today+overdue list and agenda, and does
 > mark-done / log-outcome / snooze / quick-add.
+> **Milestone 4:** the sales dashboard + reporting layer — read-only aggregates
+> over M1–M3 data (NO new tables): headline tiles, a funnel computed from stage
+> history, team-performance metrics, and trends. Everything is role-scoped
+> (rep=own / manager=team / owner=all), period-filtered in the user's timezone,
+> money-safe (integer minor units, grouped by currency), Redis-cached, and
+> pinned by a golden-dataset test. Web gets the full dashboard (tiles + funnel +
+> Recharts trends + team table + period/pipeline filters); mobile gets a "My
+> performance" glance.
 
 ## Stack
 
@@ -77,7 +85,7 @@ Get the keys from **Clerk Dashboard → API Keys**:
 
 ```bash
 docker compose up -d        # Postgres + Redis
-pnpm db:migrate             # apply migrations (M0 + M1 + M2 + M3 activity)
+pnpm db:migrate             # apply migrations (M0 + M1 + M2 + M3 + M4 indexes)
 pnpm db:seed                # org + team + roles + users + sample CRM/deal/task data
 ```
 
@@ -192,6 +200,36 @@ and audit-logged. List endpoints are cursor-paginated and return
 | POST | `/api/v1/notifications/:id/read` \| `/read-all` | `user:read` | mark one / all read (emits a live unread count) |
 | POST | `/api/v1/push-tokens` | `user:read` | `{ token, platform: IOS\|ANDROID }` — register an Expo device token (UNIQUE) |
 | DELETE | `/api/v1/push-tokens` | `user:read` | `{ token }` — unregister |
+| GET | `/api/v1/dashboard/sales` | `dashboard:read` | `?period=today\|week\|month\|quarter\|custom&from=&to=&pipelineId=&scope=auto\|me` → tiles (role-scoped) |
+| GET | `/api/v1/dashboard/funnel` | `dashboard:read` | `?pipelineId=&period=` → distinct deals per stage (from stage_history) + conversions |
+| GET | `/api/v1/dashboard/team` | `dashboard:read_team` | per-rep metrics; **reps (member) get 403** |
+| GET | `/api/v1/dashboard/trends` | `dashboard:read` | `?metric=won\|created\|revenue&interval=week\|month&period=&pipelineId=` |
+
+### Dashboard / reporting (M4)
+
+Read-only aggregation over M1–M3 data — **no new domain tables**. Design points:
+
+- **Role scope** — `dashboard:read_all` → org-wide (owner), `dashboard:read_team`
+  → the requester's team(s) (admin/manager), `dashboard:read` → self (member/rep).
+  The scope resolves to a set of user ids that filter deals (`ownerId`),
+  activities (`actorId`), and tasks (`assigneeId`). `/dashboard/sales?scope=me`
+  forces own-scope (mobile "My performance").
+- **Timezone-correct periods** — `this week/month/quarter` boundaries are the
+  requester's LOCAL calendar edges (DST-correct via `zonedWallClockToUtc`), then
+  compared as UTC instants. `custom` takes `from`/`to` as local `YYYY-MM-DD`.
+- **Money-safe** — sums stay integer minor units and are **grouped by currency**
+  (never summed across); every money metric is a `{ currency, amountMinor }[]`.
+- **Rates guard division by zero** — win rate / conversion are `null` (rendered
+  `—` / 0%) when their denominator is 0.
+- **Funnel from stage history** — for each stage, the count of **DISTINCT** deals
+  that entered it (any `stage_history` row with that `toStageId`); a won deal
+  still counts in earlier stages, and reopened/backward moves de-dupe by deal.
+- **Cached** — each payload is cached in Redis for 5 min, keyed by
+  (endpoint, org, scope, user/all, params). A cache miss/error degrades to a live
+  recompute (never a failed request). Aggregate queries are backed by new
+  composite indexes (`Deal(org,status,closedAt)`, `Deal(org,createdAt)`,
+  `ActivityEvent(org,actorId,createdAt)`, `Task(org,assigneeId,completedAt)`);
+  a materialized view is the next step if these outgrow the cache.
 
 Realtime: clients open a Socket.io connection to the **`/notifications`**
 namespace (`auth: { token }`, Clerk-verified), join a per-user room, and receive
@@ -303,6 +341,12 @@ Permissions and role→permission grants are defined once in
 Notifications and push tokens are per-user and gated by `user:read` (held by
 every role) — a user only ever sees/mutates their own.
 
+Dashboard scope keys (M4) select how much data each role sees:
+- **owner** → `dashboard:read_all` → org-wide metrics
+- **admin** → `dashboard:read_team` → their team(s) (acts as manager); can read the
+  team table
+- **member** → `dashboard:read` → own metrics only; **403** on `/dashboard/team`
+
 ## Testing
 
 ```bash
@@ -313,6 +357,11 @@ pnpm --filter @crm/api test        # unit: custom-field validation, activity emi
                                     #        send skips DONE + redirects to current assignee, notification
                                     #        fan-out delivers each channel once + prunes stale push tokens,
                                     #        agenda buckets in the assignee timezone
+                                    #   M4 — GOLDEN DATASET: every tile / win rate / funnel conversion /
+                                    #        trend point asserted exactly (multi-currency, integer minor
+                                    #        units); weighted pipeline, funnel distinct-per-stage (incl.
+                                    #        reopened), period boundaries in IST/EST-DST, div-by-zero
+                                    #        guards, role→scope + team 403
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -434,3 +483,31 @@ quick-add creates a record that appears in the list.
   no-ops on simulators / Expo Go limitations, so the rest of the app always works;
   a real device with a dev/EAS build receives pushes and tapping one opens the task.
   Per the non-goals, there is no offline task creation and no external calendar sync.
+
+## Assumptions (M4 — dashboard)
+
+- **No new domain tables** — the dashboard is pure read-only aggregation over
+  M1–M3 (deals, stage_history, activity, tasks). The only migration is
+  **indexes**.
+- **Role→scope mapping** uses the existing three system roles: owner →
+  `read_all` (org), admin → `read_team` (their team, i.e. the "manager"), member
+  → `read` (self). This is the pragmatic mapping onto the seeded roles; a
+  dedicated "manager" role would slot in the same way. Team membership drives the
+  team set (`TeamMembership`); a user in no team resolves "team" to just self.
+- **Aggregation math is pure + framework-free** (`dashboard.math.ts` /
+  `dashboard.period.ts`), so the golden-dataset test asserts exact numbers with
+  no DB — deterministic and fast. The service only fetches minimal rows and
+  delegates. (An e2e that seeds the same dataset into Postgres is a drop-in later;
+  the numbers are identical.)
+- **Pipeline value / weighted pipeline are a live snapshot** of OPEN deals (not
+  period-bound); won/revenue/win-rate/avg/created/activities/tasks are
+  period-bound. **Weighted** = `round(Σ(amountMinor × probability) / 100)` per
+  currency (one round per currency, no per-deal drift).
+- **Funnel cohort** = deals **created in the period** within the pipeline (+ scope);
+  each stage counts distinct deals that entered it per `stage_history`.
+  `overallConversion` = last-stage entrants / first-stage entrants.
+- **Cache TTL is 5 min** (short, so numbers stay fresh); the cache is an
+  optimization only — a miss or Redis error recomputes live. No explicit
+  invalidation on write (a stale window ≤ TTL is acceptable for a dashboard).
+- **Trends `revenue`** reuses the WON series (revenue = won deal value); the web
+  chart plots `count` for won/created and per-currency `value` for revenue.

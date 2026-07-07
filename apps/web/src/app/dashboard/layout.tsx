@@ -4,6 +4,7 @@ import { NotificationBell } from '@/components/crm/NotificationBell';
 
 const NAV = [
   { href: '/dashboard', label: 'Home' },
+  { href: '/dashboard/sales', label: 'Sales' },
   { href: '/dashboard/contacts', label: 'Contacts' },
   { href: '/dashboard/companies', label: 'Companies' },
   { href: '/dashboard/leads', label: 'Leads' },

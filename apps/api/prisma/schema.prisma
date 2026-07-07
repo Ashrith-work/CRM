@@ -380,6 +380,8 @@ model ActivityEvent {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, entityType, entityId, createdAt])
+  // Milestone 4 — "activities logged" per actor in a period.
+  @@index([organizationId, actorId, createdAt])
 }
 
 // ============================================================================
@@ -469,6 +471,9 @@ model Deal {
   @@index([organizationId, status])
   @@index([contactId])
   @@index([companyId])
+  // Milestone 4 — dashboard aggregates: won/lost in a period; deals created.
+  @@index([organizationId, status, closedAt])
+  @@index([organizationId, createdAt])
 }
 
 /** Append-only record of every stage transition. fromStageId/toStageId are
@@ -565,6 +570,8 @@ model Task {
   @@index([organizationId, assigneeId, status, dueAt])
   @@index([organizationId, relatedType, relatedId])
   @@index([organizationId, startAt])
+  // Milestone 4 — "tasks completed" per assignee in a period.
+  @@index([organizationId, assigneeId, completedAt])
 }
 
 /** One row per scheduled reminder (append-only). The reminder engine marks rows

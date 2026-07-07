@@ -5,6 +5,7 @@ export * from './deals';
 export * from './tasks';
 export * from './notifications';
 export * from './users';
+export * from './dashboard';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -29,4 +30,6 @@ export const API_ROUTES = {
   notifications: `/${API_PREFIX}/notifications`,
   pushTokens: `/${API_PREFIX}/push-tokens`,
   users: `/${API_PREFIX}/users`,
+  // Milestone 4 — dashboard + reporting (read-only aggregates).
+  dashboard: `/${API_PREFIX}/dashboard`,
 } as const;
