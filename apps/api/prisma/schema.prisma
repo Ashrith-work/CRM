@@ -58,6 +58,16 @@ model Organization {
   // M0 retrofit — connected third-party integrations.
   integrations Integration[]
 
+  // M1 — Shopify commerce ingestion.
+  customers         Customer[]
+  products          Product[]
+  orders            Order[]
+  orderItems        OrderItem[]
+  carts             Cart[]
+  cartItems         CartItem[]
+  commerceEvents    CommerceEvent[]
+  webhookDeliveries WebhookDelivery[]
+
   @@index([slug])
 }
 
@@ -66,6 +76,7 @@ enum IntegrationStatus {
   CONNECTED
   DISCONNECTED
   ERROR
+  PAUSED
 }
 
 /**
@@ -81,6 +92,8 @@ model Integration {
   config            Json              @default("{}")
   connectedById     String?
   connectedAt       DateTime?
+  // M1 — last successful sync (backfill/reconciliation) for this integration.
+  lastSyncedAt      DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   deletedAt         DateTime?
@@ -89,6 +102,184 @@ model Integration {
 
   @@unique([organizationId, provider])
   @@index([organizationId, deletedAt])
+}
+
+// ============================================================================
+// Milestone 1 (commerce) — Shopify ingestion. Idempotency: UNIQUE(org,
+// externalId) per entity + a WebhookDelivery dedup ledger. Money is INTEGER
+// minor units (paise); all datetimes UTC. customerId/productId/mergedIntoId etc.
+// are soft scalar refs (no cross-table FK web), matching the CRM convention.
+// ============================================================================
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+}
+
+enum FinancialStatus {
+  PENDING
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum CommerceEventType {
+  CHECKOUT_STARTED
+  ADD_TO_CART
+  ORDER_PLACED
+}
+
+model Customer {
+  id             String    @id @default(cuid())
+  organizationId String
+  externalId     String? // Shopify customer id (guests may be null)
+  email          String? // normalized: trim + lowercase
+  phone          String? // normalized: E.164
+  firstName      String?
+  lastName       String?
+  /** Non-null when this row was merged INTO another (survivor). */
+  mergedIntoId   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@unique([organizationId, email])
+  @@index([organizationId, phone])
+  @@index([organizationId, mergedIntoId])
+}
+
+model Product {
+  id             String    @id @default(cuid())
+  organizationId String
+  externalId     String
+  title          String
+  imageUrl       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+}
+
+model Order {
+  id              String          @id @default(cuid())
+  organizationId  String
+  externalId      String
+  orderNumber     String?
+  customerId      String?
+  status          OrderStatus     @default(PENDING)
+  financialStatus FinancialStatus @default(PENDING)
+  totalMinor      Int             @default(0)
+  refundedMinor   Int             @default(0)
+  currency        String          @default("INR")
+  discountCode    String?
+  discountMinor   Int             @default(0)
+  placedAt        DateTime
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        OrderItem[]
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, customerId])
+  @@index([organizationId, placedAt])
+  @@index([organizationId, financialStatus])
+}
+
+model OrderItem {
+  id             String   @id @default(cuid())
+  organizationId String
+  orderId        String
+  productId      String?
+  title          String
+  /** Apparel SIZE/COLOUR from the Shopify variant_title. */
+  variant        String?
+  quantity       Int      @default(1)
+  priceMinor     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, orderId])
+}
+
+model Cart {
+  id               String    @id @default(cuid())
+  organizationId   String
+  externalId       String // Shopify checkout token/id
+  customerId       String?
+  checkoutStartedAt DateTime
+  /** Set when a matching Order arrives — halts M4 abandoned-cart recovery. */
+  convertedOrderId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        CartItem[]
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, customerId])
+}
+
+model CartItem {
+  id             String   @id @default(cuid())
+  organizationId String
+  cartId         String
+  productId      String?
+  title          String
+  variant        String?
+  quantity       Int      @default(1)
+  priceMinor     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cart         Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, cartId])
+}
+
+/** Behavioral stream (checkout_started / add_to_cart / order_placed) — feeds M4. */
+model CommerceEvent {
+  id             String            @id @default(cuid())
+  organizationId String
+  customerId     String?
+  type           CommerceEventType
+  externalId     String?
+  metadata       Json?
+  occurredAt     DateTime
+  createdAt      DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, customerId, occurredAt])
+  @@index([organizationId, type, occurredAt])
+}
+
+/** Webhook dedup ledger — UNIQUE(org, provider, eventId) makes delivery idempotent. */
+model WebhookDelivery {
+  id             String   @id @default(cuid())
+  organizationId String
+  provider       String
+  eventId        String
+  topic          String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider, eventId])
+  @@index([organizationId, provider, createdAt])
 }
 
 model User {

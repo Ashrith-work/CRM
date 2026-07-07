@@ -52,6 +52,21 @@ const envSchema = z.object({
   RECORDING_MAX_BYTES: z.coerce.number().int().min(1).default(50 * 1024 * 1024),
   /** TTL (seconds) for the signed recording playback URL. */
   RECORDING_URL_TTL_SECONDS: z.coerce.number().int().min(30).default(300),
+
+  // Milestone 1 (commerce) — Shopify ingestion.
+  /** Pinned Admin API version. */
+  SHOPIFY_API_VERSION: z.string().default('2024-10'),
+  SHOPIFY_API_KEY: z.string().optional(),
+  /** App API secret — used for webhook HMAC (falls back if no webhook secret). */
+  SHOPIFY_API_SECRET: z.string().optional(),
+  /** Webhook signing secret (preferred for HMAC when present). */
+  SHOPIFY_WEBHOOK_SECRET: z.string().optional(),
+  /** Admin API access token. Unset ⇒ the connector reports not_connected. */
+  SHOPIFY_ADMIN_ACCESS_TOKEN: z.string().optional(),
+  /** e.g. "nerige.myshopify.com". */
+  SHOPIFY_SHOP_DOMAIN: z.string().optional(),
+  /** Nightly reconciliation cadence (ms). Default 24h. */
+  RECONCILE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
 });
 
 export type Env = z.infer<typeof envSchema>;

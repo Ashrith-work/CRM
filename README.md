@@ -1,4 +1,4 @@
-# CRM — M0 (Foundation) + M1 (Core CRM) + M2 (Revenue) + M3 (Activity) + M4 (Dashboard) + M5 (Calls)
+# CRM — M0 (Foundation) + M1 (Core CRM) + M2 (Revenue) + M3 (Activity) + M4 (Dashboard) + M5 (Calls) + Commerce (Shopify)
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -31,6 +31,12 @@ clients never duplicate it.
 > pinned by a golden-dataset test. Web gets the full dashboard (tiles + funnel +
 > Recharts trends + team table + period/pipeline filters); mobile gets a "My
 > performance" glance.
+> **Commerce (Shopify ingestion):** import a Shopify store's customers, products,
+> and orders — **historical backfill + live webhooks** — idempotently, resolving
+> duplicate identities into one Customer. HMAC-verified + deduped webhooks, money
+> as integer paise, a BullMQ backfill + nightly reconciliation worker, and a
+> Settings connection panel. No analytics/AI. (This is the user's "M1"; labeled
+> *Commerce* here to avoid colliding with the repo's M1 = Core CRM.)
 > **Milestone 5:** call management — **MyOperator** telephony (click-to-call +
 > inbound/outbound webhooks) logging every call to the matched contact's
 > timeline, with recordings stored in **Cloudinary** and playable ONLY with
@@ -120,6 +126,9 @@ content on both clients. It **wipes the seeded tables first**, then inserts:
   contacts — every **STORED** recording has GRANTED consent; consent-less
   completed calls are **BLOCKED**. The org's `myoperatorCompanyId` is set so
   webhooks resolve to it.
+- A connected **Shopify** integration + ~20 commerce customers, 8 products, and
+  40 orders (money in **paise**, mixed paid/partially-refunded/refunded/pending)
+  so the Settings panel shows real CRM order counts.
 
 ```bash
 pnpm db:seed                 # SMALL (fast local demo) — the default
@@ -242,6 +251,34 @@ and audit-logged. List endpoints are cursor-paginated and return
 | POST | `/api/v1/webhooks/myoperator` | **Public** (HMAC-verified) | inbound/outbound events; **idempotent** on `(org, externalCallId)` |
 | GET | `/api/v1/integrations` | `integration:read` | connected third-party providers (Configure) |
 | POST | `/api/v1/integrations/connect` \| `/:id/disconnect` | `integration:manage` | connect/disconnect; **members get 403 `{ code: FORBIDDEN }`** |
+| POST | `/api/v1/ingestion/shopify/connect` | `commerce:manage` | verify creds (shop call) + upsert the Shopify Integration |
+| GET | `/api/v1/ingestion/shopify/status` | `commerce:read` | status + shopDomain + lastSyncedAt + CRM-vs-Shopify order counts + sync job |
+| POST | `/api/v1/ingestion/shopify/sync-now` | `commerce:manage` | enqueue the backfill (runs in the worker, never the request) |
+| POST | `/api/v1/customers/merge` | `commerce:manage` | `{ survivorId, mergedId }` — manual identity merge (audited) |
+| POST | `/api/v1/webhooks/shopify` | **Public** (HMAC-verified) | live topics; **idempotent** on `X-Shopify-Webhook-Id` (WebhookDelivery ledger) |
+
+### Commerce ingestion (Shopify)
+
+- **Backfill** (BullMQ worker): customers → products → orders, cursor-paginated
+  (REST Link `page_info`) with **429 leaky-bucket backoff** (Retry-After /
+  exponential + jitter). Every row upserts on `UNIQUE(org, externalId)`. Progress
+  is a `SyncJobStatus` the Settings panel renders.
+- **Webhooks**: HMAC-SHA256 of the **raw body** (`SHOPIFY_WEBHOOK_SECRET` →
+  `SHOPIFY_API_SECRET`) is checked **before any parse/DB** (bad → 401);
+  idempotency is the `WebhookDelivery(org, provider, eventId)` unique key (retry →
+  200 no-op). The controller acks fast; the worker applies the event with the
+  **same mappers as backfill** (out-of-order tolerant via upsert). `refunds/create`
+  recomputes `refundedMinor` + `financialStatus` (order kept, never zeroed).
+- **Money** is parsed from strings into **integer minor units** (`"1234.50"` →
+  `123450`) with no float; times are UTC; `variant` holds apparel SIZE/COLOUR.
+- **Identity resolution** (exact-match only, never fuzzy/AI): normalize email
+  (trim+lowercase) + phone (E.164, IN); a matching email/phone/externalId is the
+  same person. A guest order + a later account with the same email → **one
+  Customer** (survivor owns both order sets); the merged row keeps `mergedIntoId`
+  and its email is nulled so `UNIQUE(org, email)` holds.
+- **Nightly reconciliation** (repeatable job): re-import orders since
+  `lastSyncedAt`, fill gaps from dropped webhooks, and alert if counts diverge —
+  the CRM self-heals.
 
 ### Call management (M5)
 
@@ -422,6 +459,25 @@ than rebuilt, which would break M1–M5):
   set), `packages/types` (vs `db`/`shared`/`ui`), and in-process workers (vs a
   separate `apps/worker`).
 
+### Data model (Commerce — Shopify)
+
+New tables, all org-scoped with `UNIQUE(org, externalId)` and integer-minor money:
+- **Customer** — externalId?, email? (unique per org), phone? (E.164), names,
+  `mergedIntoId` (merge survivor pointer)
+- **Product** — externalId, title, imageUrl
+- **Order** — externalId, orderNumber, customerId?, status
+  (`PENDING`/`PAID`/`FULFILLED`/`CANCELLED`/`REFUNDED`), financialStatus
+  (`PENDING`/`PAID`/`PARTIALLY_REFUNDED`/`REFUNDED`), **totalMinor / refundedMinor
+  / discountMinor** (paise), currency, discountCode, placedAt (UTC)
+- **OrderItem** — title, `variant` (SIZE/COLOUR), quantity, priceMinor
+- **Cart / CartItem** — checkoutStartedAt, `convertedOrderId` (set when a matching
+  order arrives — halts M4 abandoned-cart)
+- **CommerceEvent** — behavioral stream (`CHECKOUT_STARTED`/`ADD_TO_CART`/
+  `ORDER_PLACED`)
+- **WebhookDelivery** — dedup ledger, `UNIQUE(org, provider, eventId)`
+
+(These are the commerce entities, distinct from the CRM's Contact/Company/Deal.)
+
 ## RBAC model
 
 Permissions and role→permission grants are defined once in
@@ -467,6 +523,10 @@ pnpm --filter @crm/api test        # unit: custom-field validation, activity emi
                                     #        ConsentGate blocks + audits when consent absent, fetch-
                                     #        recording worker stores on consent / BLOCKED otherwise /
                                     #        FAILED over the size guard
+                                    #   Commerce — money string→paise (no float drift), Shopify mappers
+                                    #        (status/refund/variant), HMAC valid/tampered, webhook dedup
+                                    #        idempotency, pagination + 429 backoff resume, identity merge
+                                    #        (guest+account→one, email-unique respected), reconcile gap-fill
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -644,3 +704,32 @@ quick-add creates a record that appears in the list.
 - **Data residency**: recordings live in the Cloudinary account's region —
   provision it in India; the adapter itself is region-agnostic. Per the non-goals
   there is no transcription/AI, no WhatsApp/SMS, and no mobile offline.
+
+## Assumptions (Commerce — Shopify)
+
+- **Architecture adaptation** — the spec references `apps/worker` / `packages/db` /
+  "Part 5"; consistent with the M0 retrofit decision, the ingestion pipeline was
+  built into the existing repo (`apps/api/src/ingestion` + in-process BullMQ
+  worker, `packages/types`, the M0 `Integration` model), not a new worker app.
+- **No live Nerige store in this environment** — the connector/backfill/reconcile
+  call the real Admin API when `SHOPIFY_ADMIN_ACCESS_TOKEN` + `SHOPIFY_SHOP_DOMAIN`
+  are set; without them `connect` reports **not_connected with a reason** (no
+  crash) and backfill is a no-op. The full pipeline (mappers, money, HMAC, dedup,
+  identity, pagination+429, reconcile) is covered by mocked unit tests, and the
+  **webhook path was verified live** (valid→200, retry→duplicate, tampered→401,
+  one Order in paise, customer normalized).
+- **Webhook HMAC requires a secret** — unlike M5's dev-lenient MyOperator webhook,
+  the Shopify webhook rejects everything (401) unless `SHOPIFY_WEBHOOK_SECRET` (or
+  `SHOPIFY_API_SECRET`) is set, per the strict "verify FIRST" requirement.
+- **Identity is exact-match only** (email/phone/externalId), never fuzzy/AI. The
+  survivor is the earliest-created row; merges are audited (`customer.merge`), keep
+  both rows, and null the merged email to uphold `UNIQUE(org, email)`.
+- **Refunds are additive** — `refunds/create` increments `refundedMinor` by that
+  refund's successful transactions (safe because deliveries are deduped) and
+  recomputes `financialStatus`; the order is never deleted/zeroed.
+- **Backfill uses REST cursor pagination + 429 backoff**; the Shopify **Bulk
+  Operations** (JSONL) path is the documented next step for very large histories.
+- **Commerce read/manage is admin-only** (`commerce:read`/`commerce:manage` on
+  owner+admin); Settings is the only UI. Org for a webhook resolves via
+  `X-Shopify-Shop-Domain` → `Integration.config.shopDomain` (single-store falls
+  back to the sole Shopify integration).

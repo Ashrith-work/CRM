@@ -8,6 +8,7 @@ export * from './users';
 export * from './dashboard';
 export * from './calls';
 export * from './integrations';
+export * from './commerce';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -40,4 +41,8 @@ export const API_ROUTES = {
   myoperatorWebhook: `/${API_PREFIX}/webhooks/myoperator`,
   // M0 retrofit — integrations.
   integrations: `/${API_PREFIX}/integrations`,
+  // M1 commerce — Shopify ingestion.
+  ingestion: `/${API_PREFIX}/ingestion`,
+  shopifyWebhook: `/${API_PREFIX}/webhooks/shopify`,
+  customersMerge: `/${API_PREFIX}/customers/merge`,
 } as const;

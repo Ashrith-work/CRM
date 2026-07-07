@@ -27,6 +27,8 @@ import { ConsentsModule } from './consents/consents.module';
 import { RecordingsModule } from './recordings/recordings.module';
 import { CallsModule } from './calls/calls.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { CustomersModule } from './customers/customers.module';
+import { IngestionModule } from './ingestion/ingestion.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -72,6 +74,9 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     CallsModule,
     // M0 retrofit — integrations directory (Configure).
     IntegrationsModule,
+    // M1 commerce — Shopify ingestion (customers/identity + ingestion worker).
+    CustomersModule,
+    IngestionModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

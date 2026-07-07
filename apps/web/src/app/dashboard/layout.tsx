@@ -36,6 +36,7 @@ const NAV_GROUPS: Array<{ label: string; items: Array<{ href: string; label: str
       { href: '/dashboard/settings/custom-fields', label: 'Custom fields' },
       { href: '/dashboard/settings/pipelines', label: 'Pipelines' },
       { href: '/dashboard/settings/integrations', label: 'Integrations' },
+      { href: '/dashboard/settings/shopify', label: 'Shopify' },
     ],
   },
 ];

@@ -6,7 +6,7 @@ import { z } from 'zod';
  * MYOPERATOR, CLOUDINARY, CLERK, SHOPIFY).
  */
 
-export const INTEGRATION_STATUSES = ['CONNECTED', 'DISCONNECTED', 'ERROR'] as const;
+export const INTEGRATION_STATUSES = ['CONNECTED', 'DISCONNECTED', 'ERROR', 'PAUSED'] as const;
 export const IntegrationStatusSchema = z.enum(INTEGRATION_STATUSES);
 export type IntegrationStatus = z.infer<typeof IntegrationStatusSchema>;
 

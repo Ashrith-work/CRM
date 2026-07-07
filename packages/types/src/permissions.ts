@@ -57,6 +57,10 @@ export const PERMISSIONS = {
   // M0 retrofit — third-party integrations (Configure).
   INTEGRATION_READ: 'integration:read',
   INTEGRATION_MANAGE: 'integration:manage',
+
+  // M1 commerce — Shopify ingestion + identity (admin-only).
+  COMMERCE_READ: 'commerce:read',
+  COMMERCE_MANAGE: 'commerce:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -119,6 +123,9 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // Integrations (Configure) — admins connect/disconnect.
     PERMISSIONS.INTEGRATION_READ,
     PERMISSIONS.INTEGRATION_MANAGE,
+    // Commerce ingestion + identity merge (admin-only).
+    PERMISSIONS.COMMERCE_READ,
+    PERMISSIONS.COMMERCE_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,

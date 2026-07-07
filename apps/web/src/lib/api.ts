@@ -122,6 +122,16 @@ import {
   type ConnectIntegrationInput,
   type IntegrationListResponse,
 } from '@crm/types';
+import {
+  ShopifyStatusSchema,
+  SyncNowResponseSchema,
+  MergeResultSchema,
+  type ShopifyStatus,
+  type ConnectShopifyInput,
+  type SyncNowResponse,
+  type MergeCustomersInput,
+  type MergeResult,
+} from '@crm/types';
 import { z, type ZodType } from 'zod';
 
 const StageArrayResponseSchema = z.object({ data: z.array(StageSchema) });
@@ -593,4 +603,25 @@ export function connectIntegration(getToken: TokenGetter, body: ConnectIntegrati
 }
 export function disconnectIntegration(getToken: TokenGetter, id: string): Promise<Integration> {
   return request(getToken, `${API_ROUTES.integrations}/${id}/disconnect`, IntegrationSchema, { method: 'POST' });
+}
+
+
+// --- Shopify ingestion (M1) -------------------------------------------------
+export function getShopifyStatus(getToken: TokenGetter): Promise<ShopifyStatus> {
+  return request(getToken, `${API_ROUTES.ingestion}/shopify/status`, ShopifyStatusSchema);
+}
+export function connectShopify(getToken: TokenGetter, body: ConnectShopifyInput): Promise<ShopifyStatus> {
+  return request(getToken, `${API_ROUTES.ingestion}/shopify/connect`, ShopifyStatusSchema, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+export function shopifySyncNow(getToken: TokenGetter): Promise<SyncNowResponse> {
+  return request(getToken, `${API_ROUTES.ingestion}/shopify/sync-now`, SyncNowResponseSchema, { method: 'POST' });
+}
+export function mergeCustomers(getToken: TokenGetter, body: MergeCustomersInput): Promise<MergeResult> {
+  return request(getToken, API_ROUTES.customersMerge, MergeResultSchema, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@clerk/nextjs';
 import type { Integration } from '@crm/types';
 import {
@@ -15,6 +16,7 @@ const STATUS_BADGE: Record<Integration['status'], string> = {
   CONNECTED: 'bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-400',
   DISCONNECTED: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   ERROR: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400',
+  PAUSED: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
 };
 
 export default function IntegrationsPage() {
@@ -66,6 +68,14 @@ export default function IntegrationsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Integrations" subtitle="Connect the third-party services this workspace uses." />
+
+      <Link
+        href="/dashboard/settings/shopify"
+        className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm hover:border-brand-400 dark:border-slate-800 dark:bg-slate-900"
+      >
+        <span className="font-medium text-slate-800 dark:text-slate-100">🛍️ Shopify — connection &amp; sync status</span>
+        <span className="text-brand-600 dark:text-brand-400">Open panel →</span>
+      </Link>
 
       {actionError && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">

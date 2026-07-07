@@ -686,6 +686,65 @@ async function seedPrimaryOrg(): Promise<void> {
     ],
   });
   bump('integrations', 3);
+
+  // ----- Commerce (Shopify) sample: integration + customers/products/orders --
+  await prisma.integration.create({
+    data: {
+      id: mkId('int'),
+      organizationId: org.id,
+      provider: 'shopify',
+      status: 'CONNECTED',
+      externalAccountId: 'nerige.myshopify.com',
+      connectedById: adminId,
+      connectedAt: HISTORY_START,
+      lastSyncedAt: new Date(NOW.getTime() - 3_600_000),
+      config: { shopDomain: 'nerige.myshopify.com', apiVersion: '2024-10', shopName: 'Nerige' },
+    },
+  });
+  bump('integrations', 1);
+
+  const productTitles = ['Cotton Tee', 'Linen Shirt', 'Denim Jacket', 'Chino Pants', 'Hoodie', 'Summer Dress', 'Wool Scarf', 'Sneakers'];
+  const products = productTitles.map((title, i) => ({ id: mkId('pr'), organizationId: org.id, externalId: `shp_prod_${1000 + i}`, title, imageUrl: `https://cdn.nerige.example/${i}.jpg`, createdAt: HISTORY_START, updatedAt: HISTORY_START }));
+  await prisma.product.createMany({ data: products });
+  bump('products', products.length);
+
+  const commerceCustomers = Array.from({ length: 20 }, (_, i) => {
+    const firstName = faker.person.firstName();
+    const lastName = faker.person.lastName();
+    const created = between(HISTORY_START, NOW);
+    return { id: mkId('cu'), organizationId: org.id, externalId: `shp_cust_${5000 + i}`, email: faker.internet.email({ firstName, lastName }).toLowerCase(), phone: faker.phone.number(), firstName, lastName, createdAt: created, updatedAt: created };
+  });
+  await prisma.customer.createMany({ data: commerceCustomers });
+  bump('customers', commerceCustomers.length);
+
+  const sizes = ['XS', 'S', 'M', 'L', 'XL'];
+  const colours = ['Black', 'White', 'Navy', 'Olive'];
+  const orderRows: Prisma.OrderCreateManyInput[] = [];
+  const orderItemRows: Prisma.OrderItemCreateManyInput[] = [];
+  for (let i = 0; i < 40; i++) {
+    const cust = pick(commerceCustomers);
+    const placedAt = between(HISTORY_START, NOW);
+    const fin = faker.helpers.weightedArrayElement([
+      { weight: 70, value: 'PAID' as const },
+      { weight: 15, value: 'PARTIALLY_REFUNDED' as const },
+      { weight: 8, value: 'REFUNDED' as const },
+      { weight: 7, value: 'PENDING' as const },
+    ]);
+    const totalMinor = rupeesToPaise(faker.number.int({ min: 499, max: 9999 }));
+    const refundedMinor = fin === 'REFUNDED' ? totalMinor : fin === 'PARTIALLY_REFUNDED' ? Math.round(totalMinor * 0.4) : 0;
+    const status = fin === 'REFUNDED' ? 'REFUNDED' : fin === 'PENDING' ? 'PENDING' : maybe(0.7) ? 'FULFILLED' : 'PAID';
+    const discountMinor = maybe(0.3) ? rupeesToPaise(faker.number.int({ min: 50, max: 500 })) : 0;
+    const orderId = mkId('or');
+    orderRows.push({ id: orderId, organizationId: org.id, externalId: `shp_order_${9000 + i}`, orderNumber: String(1000 + i), customerId: cust.id, status, financialStatus: fin, totalMinor, refundedMinor, currency: 'INR', discountCode: discountMinor ? 'DIWALI10' : null, discountMinor, placedAt, createdAt: placedAt, updatedAt: placedAt });
+    for (let j = 0; j < faker.number.int({ min: 1, max: 3 }); j++) {
+      const p = pick(products);
+      orderItemRows.push({ id: mkId('oi'), organizationId: org.id, orderId, productId: p.id, title: p.title, variant: `${pick(sizes)} / ${pick(colours)}`, quantity: faker.number.int({ min: 1, max: 3 }), priceMinor: rupeesToPaise(faker.number.int({ min: 299, max: 2999 })) });
+    }
+  }
+  await prisma.order.createMany({ data: orderRows });
+  await prisma.orderItem.createMany({ data: orderItemRows });
+  bump('orders', orderRows.length);
+  bump('orderItems', orderItemRows.length);
 }
 
 // ---------------------------------------------------------------------------
@@ -738,6 +797,15 @@ async function seedSecondOrg(): Promise<void> {
 // Re-run: clear seeded tables (children first, FK-safe).
 // ---------------------------------------------------------------------------
 async function clearAll(): Promise<void> {
+  // M1 commerce (children first).
+  await prisma.orderItem.deleteMany();
+  await prisma.cartItem.deleteMany();
+  await prisma.order.deleteMany();
+  await prisma.cart.deleteMany();
+  await prisma.commerceEvent.deleteMany();
+  await prisma.webhookDelivery.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.customer.deleteMany();
   await prisma.integration.deleteMany();
   await prisma.call.deleteMany();
   await prisma.consent.deleteMany();
