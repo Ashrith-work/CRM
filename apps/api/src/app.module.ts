@@ -22,6 +22,10 @@ import { PushTokensModule } from './push-tokens/push-tokens.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TasksModule } from './tasks/tasks.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { TelephonyModule } from './telephony/telephony.module';
+import { ConsentsModule } from './consents/consents.module';
+import { RecordingsModule } from './recordings/recordings.module';
+import { CallsModule } from './calls/calls.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -59,6 +63,12 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     TasksModule,
     // Milestone 4 — read-only dashboard/reporting over M1–M3 data.
     DashboardModule,
+    // Milestone 5 — call management. Telephony is global; Consents/Recordings
+    // register before Calls (dependency order).
+    TelephonyModule,
+    ConsentsModule,
+    RecordingsModule,
+    CallsModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

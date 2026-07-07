@@ -100,6 +100,23 @@ import {
   type UnreadCountResponse,
   type UpdateTaskInput,
 } from '@crm/types';
+import {
+  CallSchema,
+  CallListResponseSchema,
+  RecordingUrlResponseSchema,
+  ConsentSchema,
+  ConsentListResponseSchema,
+  type Call,
+  type CallListQueryInput,
+  type CallListResponse,
+  type ClickToCallInput,
+  type Consent,
+  type ConsentListResponse,
+  type LogCallInput,
+  type RecordingUrlResponse,
+  type SetConsentInput,
+  type UpdateCallInput,
+} from '@crm/types';
 import { z, type ZodType } from 'zod';
 
 const StageArrayResponseSchema = z.object({ data: z.array(StageSchema) });
@@ -522,4 +539,39 @@ export function getTrends(
   } = {},
 ): Promise<TrendsResponse> {
   return request(getToken, `${API_ROUTES.dashboard}/trends${qs(params)}`, TrendsResponseSchema);
+}
+
+// --- Calls (M5) -------------------------------------------------------------
+export type CallListParams = Partial<
+  Pick<
+    CallListQueryInput,
+    'cursor' | 'limit' | 'search' | 'order' | 'contactId' | 'dealId' | 'agentUserId' | 'direction' | 'status' | 'from' | 'to'
+  >
+>;
+
+export function listCalls(getToken: TokenGetter, params: CallListParams = {}): Promise<CallListResponse> {
+  return request(getToken, `${API_ROUTES.calls}${qs(params)}`, CallListResponseSchema);
+}
+export function getCall(getToken: TokenGetter, id: string): Promise<Call> {
+  return request(getToken, `${API_ROUTES.calls}/${id}`, CallSchema);
+}
+export function clickToCall(getToken: TokenGetter, body: ClickToCallInput): Promise<Call> {
+  return request(getToken, `${API_ROUTES.calls}/click-to-call`, CallSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function logCall(getToken: TokenGetter, body: LogCallInput): Promise<Call> {
+  return request(getToken, API_ROUTES.calls, CallSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function updateCall(getToken: TokenGetter, id: string, body: UpdateCallInput): Promise<Call> {
+  return request(getToken, `${API_ROUTES.calls}/${id}`, CallSchema, { method: 'PATCH', body: JSON.stringify(body) });
+}
+export function getCallRecording(getToken: TokenGetter, id: string): Promise<RecordingUrlResponse> {
+  return request(getToken, `${API_ROUTES.calls}/${id}/recording`, RecordingUrlResponseSchema);
+}
+
+// --- Consents (M5) ----------------------------------------------------------
+export function listConsents(getToken: TokenGetter, contactId: string): Promise<ConsentListResponse> {
+  return request(getToken, `${API_ROUTES.consents}${qs({ contactId })}`, ConsentListResponseSchema);
+}
+export function setConsent(getToken: TokenGetter, body: SetConsentInput): Promise<Consent> {
+  return request(getToken, API_ROUTES.consents, ConsentSchema, { method: 'POST', body: JSON.stringify(body) });
 }

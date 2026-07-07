@@ -52,6 +52,21 @@ import {
   // Milestone 4 — dashboard.
   SalesTilesSchema,
   type SalesTiles,
+  // Milestone 5 — calls, recordings, consent.
+  CallSchema,
+  CallListResponseSchema,
+  RecordingUrlResponseSchema,
+  ConsentSchema,
+  ConsentListResponseSchema,
+  type Call,
+  type CallListResponse,
+  type ClickToCallInput,
+  type LogCallInput,
+  type UpdateCallInput,
+  type RecordingUrlResponse,
+  type Consent,
+  type ConsentListResponse,
+  type SetConsentInput,
   type Task,
   type TaskListResponse,
   type AgendaResponse,
@@ -417,4 +432,66 @@ export function getSalesTiles(getToken: TokenGetter, params: SalesTilesParams = 
   if (params.scope) q.set('scope', params.scope);
   const s = q.toString();
   return authedGet(getToken, `${API_ROUTES.dashboard}/sales${s ? `?${s}` : ''}`, SalesTilesSchema);
+}
+
+// ---------------------------------------------------------------------------
+// Milestone 5 — calls, recordings (consent-gated), DPDP consent.
+// ---------------------------------------------------------------------------
+export interface CallListParams {
+  cursor?: string;
+  limit?: number;
+  search?: string;
+  order?: 'asc' | 'desc';
+  contactId?: string;
+  dealId?: string;
+  /** 'me' resolves to the current agent. */
+  agentUserId?: string;
+  direction?: 'INBOUND' | 'OUTBOUND';
+  status?: string;
+  from?: string;
+  to?: string;
+}
+
+function callQuery(params: CallListParams): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export function listCalls(getToken: TokenGetter, params: CallListParams = {}): Promise<CallListResponse> {
+  return authedGet(getToken, `${API_ROUTES.calls}${callQuery(params)}`, CallListResponseSchema);
+}
+export function getCall(getToken: TokenGetter, id: string): Promise<Call> {
+  return authedGet(getToken, `${API_ROUTES.calls}/${id}`, CallSchema);
+}
+export function clickToCall(getToken: TokenGetter, body: ClickToCallInput): Promise<Call> {
+  return authedSend(getToken, `${API_ROUTES.calls}/click-to-call`, 'POST', body, CallSchema);
+}
+export function logCall(getToken: TokenGetter, body: LogCallInput): Promise<Call> {
+  return authedSend(getToken, API_ROUTES.calls, 'POST', body, CallSchema);
+}
+export function updateCall(getToken: TokenGetter, id: string, body: UpdateCallInput): Promise<Call> {
+  return authedSend(getToken, `${API_ROUTES.calls}/${id}`, 'PATCH', body, CallSchema);
+}
+/** A short-lived signed recording URL — consent-gated (url is null when blocked). */
+export function getCallRecording(getToken: TokenGetter, id: string): Promise<RecordingUrlResponse> {
+  return authedGet(getToken, `${API_ROUTES.calls}/${id}/recording`, RecordingUrlResponseSchema);
+}
+
+export function listConsents(getToken: TokenGetter, contactId: string): Promise<ConsentListResponse> {
+  return authedGet(getToken, `${API_ROUTES.consents}?contactId=${encodeURIComponent(contactId)}`, ConsentListResponseSchema);
+}
+export function setConsent(getToken: TokenGetter, body: SetConsentInput): Promise<Consent> {
+  return authedSend(getToken, API_ROUTES.consents, 'POST', body, ConsentSchema);
+}
+
+/** Humanize a call duration in seconds, e.g. "3m 05s" / "45s" / "—". */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return '—';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
 }

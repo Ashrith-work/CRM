@@ -68,7 +68,7 @@ export class ReminderSweepProcessor extends WorkerHost implements OnModuleInit {
       await this.sendQueue.add(
         'send',
         { reminderId: id } satisfies ReminderSendJob,
-        { jobId: `send:${id}`, removeOnComplete: true, removeOnFail: 200, attempts: 3, backoff: { type: 'exponential', delay: 5_000 } },
+        { jobId: `send_${id}`, removeOnComplete: true, removeOnFail: 200, attempts: 3, backoff: { type: 'exponential', delay: 5_000 } },
       );
       claimed += 1;
     }

@@ -15,6 +15,9 @@ import { QuickAddTask } from './screens/QuickAddTask';
 import { Agenda } from './screens/Agenda';
 import { NotificationList } from './screens/NotificationList';
 import { Performance } from './screens/Performance';
+import { CallHistory } from './screens/CallHistory';
+import { CallDetail } from './screens/CallDetail';
+import { LogCall } from './screens/LogCall';
 import { usePushRegistration, setTaskTapHandler } from './push';
 
 /** Renders the current screen from the nav stack. */
@@ -51,6 +54,12 @@ function Router(): React.JSX.Element {
       return <NotificationList />;
     case 'performance':
       return <Performance />;
+    case 'callHistory':
+      return <CallHistory />;
+    case 'callDetail':
+      return <CallDetail id={current.id} />;
+    case 'logCall':
+      return <LogCall contactId={current.contactId} contactName={current.contactName} />;
     default:
       return <HomeMenu />;
   }

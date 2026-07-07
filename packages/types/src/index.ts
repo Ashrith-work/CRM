@@ -6,6 +6,7 @@ export * from './tasks';
 export * from './notifications';
 export * from './users';
 export * from './dashboard';
+export * from './calls';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -32,4 +33,8 @@ export const API_ROUTES = {
   users: `/${API_PREFIX}/users`,
   // Milestone 4 — dashboard + reporting (read-only aggregates).
   dashboard: `/${API_PREFIX}/dashboard`,
+  // Milestone 5 — call management.
+  calls: `/${API_PREFIX}/calls`,
+  consents: `/${API_PREFIX}/consents`,
+  myoperatorWebhook: `/${API_PREFIX}/webhooks/myoperator`,
 } as const;

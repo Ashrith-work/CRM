@@ -13,6 +13,7 @@ import { NoteList } from '@/components/crm/NoteList';
 import { Timeline } from '@/components/crm/Timeline';
 import { DealsSection } from '@/components/crm/DealsSection';
 import { TasksSection } from '@/components/crm/TasksSection';
+import { CallsSection } from '@/components/crm/CallsSection';
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -103,6 +104,8 @@ export default function ContactDetailPage() {
         </Card>
 
         <DealsSection contactId={id} />
+
+        <CallsSection contactId={id} contactPhone={c.phone} />
 
         <TasksSection relatedType="CONTACT" relatedId={id} relatedLabel={`${c.firstName} ${c.lastName}`} />
 

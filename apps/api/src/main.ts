@@ -8,7 +8,8 @@ import { AppModule } from './app.module';
 import type { Env } from './config/env';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  // rawBody: true lets the MyOperator webhook verify the HMAC over exact bytes.
+  const app = await NestFactory.create(AppModule, { bufferLogs: false, rawBody: true });
   const config = app.get(ConfigService<Env, true>);
 
   const origins = config

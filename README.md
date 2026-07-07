@@ -1,4 +1,4 @@
-# CRM — Milestones 0 (Foundation) + 1 (Core CRM) + 2 (Revenue) + 3 (Activity) + 4 (Dashboard)
+# CRM — M0 (Foundation) + M1 (Core CRM) + M2 (Revenue) + M3 (Activity) + M4 (Dashboard) + M5 (Calls)
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -31,6 +31,13 @@ clients never duplicate it.
 > pinned by a golden-dataset test. Web gets the full dashboard (tiles + funnel +
 > Recharts trends + team table + period/pipeline filters); mobile gets a "My
 > performance" glance.
+> **Milestone 5:** call management — **MyOperator** telephony (click-to-call +
+> inbound/outbound webhooks) logging every call to the matched contact's
+> timeline, with recordings stored in **Cloudinary** and playable ONLY with
+> **DPDP call-recording consent** (a ConsentGate blocks + audits otherwise).
+> Webhooks are signature-verified and idempotent; recording fetch is an async,
+> retrying, consent-gated BullMQ worker. Capture & storage only — **no
+> transcription/AI** (that is M6).
 
 ## Stack
 
@@ -38,6 +45,7 @@ clients never duplicate it.
 | --------- | ---------------------------------------------------------------- |
 | Monorepo  | Turborepo + pnpm workspaces                                      |
 | Backend   | NestJS, REST under `/api/v1`, Prisma, PostgreSQL, Redis/BullMQ, Socket.io |
+| Telephony | MyOperator (click-to-call + webhooks) · recordings in Cloudinary       |
 | Auth      | Clerk (JWT verified in a Nest guard)                             |
 | Web       | Next.js (App Router) + React + Tailwind + TypeScript, PWA        |
 | Mobile    | Expo / React Native (TypeScript)                                 |
@@ -85,7 +93,7 @@ Get the keys from **Clerk Dashboard → API Keys**:
 
 ```bash
 docker compose up -d        # Postgres + Redis
-pnpm db:migrate             # apply migrations (M0 + M1 + M2 + M3 + M4 indexes)
+pnpm db:migrate             # apply migrations (M0–M5)
 pnpm db:seed                # org + team + roles + users + sample CRM/deal/task data
 ```
 
@@ -108,6 +116,10 @@ content on both clients. It **wipes the seeded tables first**, then inserts:
   (overdue / today / upcoming / done, meetings with start-end), activity events,
   notes, a few reminders + notifications. Timestamps are spread across the last
   ~10 months (this month **and** last month both have data) so trends are real.
+- ~120 calls (inbound/outbound, realistic status mix) + DPDP consent on ~45% of
+  contacts — every **STORED** recording has GRANTED consent; consent-less
+  completed calls are **BLOCKED**. The org's `myoperatorCompanyId` is set so
+  webhooks resolve to it.
 
 ```bash
 pnpm db:seed                 # SMALL (fast local demo) — the default
@@ -221,6 +233,37 @@ and audit-logged. List endpoints are cursor-paginated and return
 | GET | `/api/v1/dashboard/funnel` | `dashboard:read` | `?pipelineId=&period=` → distinct deals per stage (from stage_history) + conversions |
 | GET | `/api/v1/dashboard/team` | `dashboard:read_team` | per-rep metrics; **reps (member) get 403** |
 | GET | `/api/v1/dashboard/trends` | `dashboard:read` | `?metric=won\|created\|revenue&interval=week\|month&period=&pipelineId=` |
+| POST | `/api/v1/calls/click-to-call` | `call:manage` | `{ contactId, dealId? }` — dials via MyOperator, logs an OUTBOUND Call |
+| POST | `/api/v1/calls` | `call:manage` | manually log a call (mobile) |
+| GET | `/api/v1/calls` | `call:read` | `?contactId=&agentUserId=(me)&direction=&status=&from=&to=&search=` |
+| GET/PATCH | `/api/v1/calls/:id` | `call:read` / `call:manage` | PATCH disposition/notes/link deal |
+| GET | `/api/v1/calls/:id/recording` | `call:read` | short-lived **signed** Cloudinary URL — **consent-gated** (null url + reason otherwise) |
+| GET/POST | `/api/v1/consents` | `consent:read` / `consent:manage` | `?contactId=`; POST `{ contactId, status: GRANTED\|WITHDRAWN, source? }` — withdraw **purges** stored recordings |
+| POST | `/api/v1/webhooks/myoperator` | **Public** (HMAC-verified) | inbound/outbound events; **idempotent** on `(org, externalCallId)` |
+
+### Call management (M5)
+
+- **Click-to-call** creates an OUTBOUND `Call` (RINGING) with the MyOperator
+  `externalCallId`; the webhook then fills in status/timing/duration.
+- **Webhook** is `@Public()` but authenticity is verified by **HMAC-SHA256** of
+  the raw body against `MYOPERATOR_WEBHOOK_SECRET` (a bad signature → 401; a
+  spoofed event is rejected). Processing **upserts on the `(organizationId,
+  externalCallId)` unique key**, so a retried event yields exactly one Call.
+  The org is resolved from the payload's `company_id` (→ `Organization.
+  myoperatorCompanyId`) or an existing click-to-call row.
+- **Number → contact** matching normalizes to E.164 (default +91) and matches on
+  the national number: 0 → log against the number (offer to create); 1 → linked;
+  >1 → most-recently-updated + `ambiguousMatch`.
+- **DPDP ConsentGate** — before any recording is downloaded, stored, or served,
+  the matched contact's `CALL_RECORDING` consent must be `GRANTED`; otherwise the
+  recording is set `BLOCKED` and an **audit row** (`recording.blocked`) is
+  written — the audio is never fetched. Missed/failed/no-answer calls are logged
+  with no recording.
+- **Async recording worker** (BullMQ): on a completed call with a recording and
+  GRANTED consent → download from MyOperator (size-guarded) → upload to Cloudinary
+  (`type: authenticated`) → `recordingStatus = STORED`. Retries with backoff;
+  `FAILED` after the last attempt (the Call is kept). Playback is only ever a
+  short-lived **signed** URL. Withdrawing consent enqueues a **purge** (erasure).
 
 ### Dashboard / reporting (M4)
 
@@ -343,6 +386,22 @@ probability / 100` (rounded, integer).
   `relatedType?`/`relatedId?`, `taskId?`, `readAt`, `deliveredChannels[]`
 - **PushToken** — userId, token (UNIQUE), platform (`IOS`/`ANDROID`), lastSeenAt
 
+### Data model (M5 — calls)
+
+`ActivityEventType` gains `CALL_LOGGED`/`CALL_COMPLETED`/`CALL_MISSED`;
+`Organization` gains `myoperatorCompanyId` (unique — maps a webhook to the org).
+
+- **Call** — direction (`INBOUND`/`OUTBOUND`), from/toNumber, agentUserId,
+  contactId?, dealId?, status (`RINGING`/`IN_PROGRESS`/`COMPLETED`/`MISSED`/
+  `FAILED`/`NO_ANSWER`), startedAt/answeredAt/endedAt, durationSeconds,
+  disposition, notes, `externalCallId`, recordingSourceUrl/recordingStoredUrl
+  (internal), `recordingStatus` (`NONE`/`PENDING`/`STORED`/`BLOCKED`/`FAILED`),
+  ambiguousMatch — **UNIQUE(organizationId, externalCallId)** for idempotency
+- **Consent** — contactId, purpose (`CALL_RECORDING`), status
+  (`GRANTED`/`WITHDRAWN`/`NOT_CAPTURED`), source (`IVR_DISCLOSURE`/`EXPLICIT`),
+  grantedAt/withdrawnAt — UNIQUE(organizationId, contactId, purpose)
+- Blocked-recording attempts reuse **AuditLog** (`action = recording.blocked`).
+
 ## RBAC model
 
 Permissions and role→permission grants are defined once in
@@ -364,6 +423,10 @@ Dashboard scope keys (M4) select how much data each role sees:
   team table
 - **member** → `dashboard:read` → own metrics only; **403** on `/dashboard/team`
 
+M5 adds `call:read`/`call:manage` and `consent:read`/`consent:manage` — granted to
+all three roles (reps place/log calls and capture consent). The webhook is public
+(HMAC-verified, not RBAC).
+
 ## Testing
 
 ```bash
@@ -379,6 +442,11 @@ pnpm --filter @crm/api test        # unit: custom-field validation, activity emi
                                     #        units); weighted pipeline, funnel distinct-per-stage (incl.
                                     #        reopened), period boundaries in IST/EST-DST, div-by-zero
                                     #        guards, role→scope + team 403
+                                    #   M5 — webhook idempotency (dup externalCallId → one Call),
+                                    #        E.164 number→contact match (none/one/ambiguous),
+                                    #        ConsentGate blocks + audits when consent absent, fetch-
+                                    #        recording worker stores on consent / BLOCKED otherwise /
+                                    #        FAILED over the size guard
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -528,3 +596,31 @@ quick-add creates a record that appears in the list.
   invalidation on write (a stale window ≤ TTL is acceptable for a dashboard).
 - **Trends `revenue`** reuses the WON series (revenue = won deal value); the web
   chart plots `count` for won/created and per-currency `value` for revenue.
+
+## Assumptions (M5 — calls)
+
+- **MyOperator + Cloudinary run in MOCK mode when unconfigured** — click-to-call
+  generates a fake `externalCallId`, and recording "storage" returns a mock
+  public id, so the whole flow (and the seed) works locally without real
+  credentials. The **provider download is always a real HTTP fetch** (only
+  Cloudinary is mocked), so mock-mode STORED requires a reachable recording URL;
+  the fetch→store path is otherwise covered by unit tests + seeded STORED rows.
+- **Webhook auth = HMAC-SHA256 over the raw body** (`x-myoperator-signature`)
+  against `MYOPERATOR_WEBHOOK_SECRET`; unset ⇒ accepted with a warning (dev). The
+  app boots with `rawBody: true` so the signature is checked over exact bytes.
+- **Org resolution for webhooks**: `payload.company_id` →
+  `Organization.myoperatorCompanyId`, falling back to an existing click-to-call
+  row's org. Events for an unknown company are ignored (logged), not errored.
+- **Agent number**: click-to-call uses `MYOPERATOR_CALLER_ID` as the agent/DID
+  leg (users don't store a personal phone); per-user DID mapping is a later
+  refinement.
+- **Consent gate is checked at store AND serve time** — a recording withdrawn
+  after storage is purged (async) and re-blocked on the next serve. Purge sets
+  `recordingStatus = BLOCKED` and drops the Cloudinary asset (no `PURGED` state).
+- **E.164 default is +91 (India)**; matching is on the national number via a
+  cheap last-4-digit DB prefilter confirmed in JS (no libphonenumber dependency).
+- **BullMQ custom job ids use `_` not `:`** (BullMQ forbids `:` in custom ids) —
+  applies to the recording fetch/purge jobs and the M3 reminder send jobs.
+- **Data residency**: recordings live in the Cloudinary account's region —
+  provision it in India; the adapter itself is region-agnostic. Per the non-goals
+  there is no transcription/AI, no WhatsApp/SMS, and no mobile offline.

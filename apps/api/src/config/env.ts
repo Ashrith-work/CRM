@@ -30,6 +30,28 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   /** Optional Expo access token for authenticated push (recommended in prod). */
   EXPO_ACCESS_TOKEN: z.string().optional(),
+
+  // Milestone 5 — telephony (MyOperator) + recording storage (Cloudinary).
+  MYOPERATOR_API_URL: z.string().default('https://obd-api.myoperator.co'),
+  /** When unset, the adapter runs in MOCK mode (generates ids; no real dialing). */
+  MYOPERATOR_API_TOKEN: z.string().optional(),
+  MYOPERATOR_COMPANY_ID: z.string().optional(),
+  /** The org's caller-id / DID used as the "from" leg of a click-to-call. */
+  MYOPERATOR_CALLER_ID: z.string().optional(),
+  /** Shared secret for HMAC-SHA256 webhook verification. When set, bad
+   * signatures are rejected; when unset (dev), webhooks are allowed with a warn. */
+  MYOPERATOR_WEBHOOK_SECRET: z.string().optional(),
+
+  /** Cloudinary — either CLOUDINARY_URL or the three discrete vars. Unset → MOCK. */
+  CLOUDINARY_URL: z.string().optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_FOLDER: z.string().default('crm/recordings'),
+  /** Max recording size to fetch/store (bytes). Default 50 MB. */
+  RECORDING_MAX_BYTES: z.coerce.number().int().min(1).default(50 * 1024 * 1024),
+  /** TTL (seconds) for the signed recording playback URL. */
+  RECORDING_URL_TTL_SECONDS: z.coerce.number().int().min(30).default(300),
 });
 
 export type Env = z.infer<typeof envSchema>;

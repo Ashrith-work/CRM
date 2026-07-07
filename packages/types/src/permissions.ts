@@ -47,6 +47,12 @@ export const PERMISSIONS = {
   DASHBOARD_READ: 'dashboard:read',
   DASHBOARD_READ_TEAM: 'dashboard:read_team',
   DASHBOARD_READ_ALL: 'dashboard:read_all',
+
+  // Milestone 5 — call management + DPDP consent.
+  CALL_READ: 'call:read',
+  CALL_MANAGE: 'call:manage',
+  CONSENT_READ: 'consent:read',
+  CONSENT_MANAGE: 'consent:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -101,6 +107,11 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // Admin acts as a team manager for dashboards (team-scoped + team table).
     PERMISSIONS.DASHBOARD_READ,
     PERMISSIONS.DASHBOARD_READ_TEAM,
+    // Call management + consent.
+    PERMISSIONS.CALL_READ,
+    PERMISSIONS.CALL_MANAGE,
+    PERMISSIONS.CONSENT_READ,
+    PERMISSIONS.CONSENT_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -121,5 +132,10 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.TASK_MANAGE,
     // Reps see only their own dashboard metrics (own-scope).
     PERMISSIONS.DASHBOARD_READ,
+    // Reps place/log calls and capture recording consent.
+    PERMISSIONS.CALL_READ,
+    PERMISSIONS.CALL_MANAGE,
+    PERMISSIONS.CONSENT_READ,
+    PERMISSIONS.CONSENT_MANAGE,
   ],
 };

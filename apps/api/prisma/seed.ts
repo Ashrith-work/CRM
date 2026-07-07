@@ -27,8 +27,8 @@ import {
 const MODE = (process.env.SEED_MODE ?? 'small').toLowerCase() === 'large' ? 'large' : 'small';
 
 const COUNTS = {
-  small: { companies: 50, contacts: 300, leads: 100, deals: 200, tasks: 500, tags: 12 },
-  large: { companies: 2_000, contacts: 50_000, leads: 500, deals: 10_000, tasks: 3_000, tags: 12 },
+  small: { companies: 50, contacts: 300, leads: 100, deals: 200, tasks: 500, tags: 12, calls: 120 },
+  large: { companies: 2_000, contacts: 50_000, leads: 500, deals: 10_000, tasks: 3_000, tags: 12, calls: 1_500 },
 }[MODE];
 
 const FAKER_SEED = 20260707; // fixed → reproducible dataset
@@ -559,6 +559,122 @@ async function seedPrimaryOrg(): Promise<void> {
   }
   await prisma.notification.createMany({ data: notifRows });
   bump('notifications', notifRows.length);
+
+  // ----- Calls + DPDP consent (M5) ---------------------------------------
+  // Map the org to a MyOperator company id so inbound webhooks resolve here.
+  await prisma.organization.update({
+    where: { id: org.id },
+    data: { myoperatorCompanyId: process.env.MYOPERATOR_COMPANY_ID || `moc_${org.slug}` },
+  });
+  const orgDid = '+911140001234'; // the org's MyOperator DID
+
+  // Consent for ~45% of contacts (60% granted / 25% withdrawn / 15% not captured).
+  const consentByContact = new Map<string, 'GRANTED' | 'WITHDRAWN' | 'NOT_CAPTURED'>();
+  const consentRows: Prisma.ConsentCreateManyInput[] = [];
+  for (const c of contacts) {
+    if (!maybe(0.45)) continue;
+    const status = faker.helpers.weightedArrayElement([
+      { weight: 60, value: 'GRANTED' as const },
+      { weight: 25, value: 'WITHDRAWN' as const },
+      { weight: 15, value: 'NOT_CAPTURED' as const },
+    ]);
+    consentByContact.set(c.id, status);
+    const grantedAt = status === 'NOT_CAPTURED' ? null : between(c.createdAt, NOW);
+    consentRows.push({
+      id: mkId('cs'),
+      organizationId: org.id,
+      contactId: c.id,
+      purpose: 'CALL_RECORDING',
+      status,
+      source: status === 'NOT_CAPTURED' ? null : pick(['IVR_DISCLOSURE', 'EXPLICIT'] as const),
+      grantedAt,
+      withdrawnAt: status === 'WITHDRAWN' ? between(grantedAt ?? c.createdAt, NOW) : null,
+      createdAt: c.createdAt,
+      updatedAt: c.createdAt,
+    });
+  }
+  await chunkCreate((rows) => prisma.consent.createMany({ data: rows }), consentRows);
+  bump('consents', consentRows.length);
+
+  const callRows: Prisma.CallCreateManyInput[] = [];
+  const callActivity: Prisma.ActivityEventCreateManyInput[] = [];
+  for (let i = 0; i < COUNTS.calls; i++) {
+    const contact = pick(contacts);
+    const agentId = pick(repIds);
+    const direction: 'INBOUND' | 'OUTBOUND' = maybe(0.5) ? 'OUTBOUND' : 'INBOUND';
+    const startedAt = between(HISTORY_START, NOW);
+    const status = faker.helpers.weightedArrayElement([
+      { weight: 60, value: 'COMPLETED' as const },
+      { weight: 18, value: 'MISSED' as const },
+      { weight: 12, value: 'NO_ANSWER' as const },
+      { weight: 10, value: 'FAILED' as const },
+    ]);
+    const answered = status === 'COMPLETED';
+    const durationSeconds = answered ? faker.number.int({ min: 20, max: 900 }) : null;
+    const answeredAt = answered ? new Date(startedAt.getTime() + faker.number.int({ min: 2, max: 20 }) * 1000) : null;
+    const endedAt = answered
+      ? new Date(answeredAt!.getTime() + durationSeconds! * 1000)
+      : new Date(startedAt.getTime() + faker.number.int({ min: 5, max: 30 }) * 1000);
+    const phone = contact.phone ?? '+919000000000';
+    const fromNumber = direction === 'OUTBOUND' ? orgDid : phone;
+    const toNumber = direction === 'OUTBOUND' ? phone : orgDid;
+
+    // Recording only on completed calls, gated by the contact's consent.
+    const consent = consentByContact.get(contact.id) ?? 'NOT_CAPTURED';
+    let recordingStatus: 'NONE' | 'STORED' | 'BLOCKED' = 'NONE';
+    let recordingSourceUrl: string | null = null;
+    let recordingStoredUrl: string | null = null;
+    if (answered) {
+      recordingSourceUrl = `https://recordings.myoperator.example/${mkId('rec')}.mp3`;
+      if (consent === 'GRANTED') {
+        recordingStatus = 'STORED';
+        recordingStoredUrl = `crm/recordings/${org.slug}/${mkId('cld')}`;
+      } else {
+        recordingStatus = 'BLOCKED';
+      }
+    }
+
+    const callId = mkId('cl');
+    callRows.push({
+      id: callId,
+      organizationId: org.id,
+      direction,
+      fromNumber,
+      toNumber,
+      agentUserId: agentId,
+      contactId: contact.id,
+      dealId: null,
+      status,
+      startedAt,
+      answeredAt,
+      endedAt,
+      durationSeconds,
+      disposition: answered ? pick(['Interested', 'Callback requested', 'Not interested', 'Wrong number', 'Deal discussed']) : null,
+      notes: maybe(0.3) ? faker.lorem.sentence() : null,
+      externalCallId: mkId('moc'),
+      recordingSourceUrl,
+      recordingStoredUrl,
+      recordingStatus,
+      createdAt: startedAt,
+      updatedAt: endedAt,
+    });
+    const eventType = status === 'COMPLETED' ? 'CALL_COMPLETED' : status === 'MISSED' ? 'CALL_MISSED' : 'CALL_LOGGED';
+    callActivity.push({
+      id: mkId('ae'),
+      organizationId: org.id,
+      entityType: 'CONTACT',
+      entityId: contact.id,
+      actorId: agentId,
+      eventType,
+      metadata: { callId, direction, durationSeconds } as Prisma.InputJsonValue,
+      source: 'seed',
+      createdAt: startedAt,
+    });
+  }
+  await chunkCreate((rows) => prisma.call.createMany({ data: rows }), callRows);
+  await chunkCreate((rows) => prisma.activityEvent.createMany({ data: rows }), callActivity);
+  bump('calls', callRows.length);
+  bump('activityEvents', callActivity.length);
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +727,8 @@ async function seedSecondOrg(): Promise<void> {
 // Re-run: clear seeded tables (children first, FK-safe).
 // ---------------------------------------------------------------------------
 async function clearAll(): Promise<void> {
+  await prisma.call.deleteMany();
+  await prisma.consent.deleteMany();
   await prisma.reminder.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.pushToken.deleteMany();

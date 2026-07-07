@@ -10,6 +10,7 @@ import { ScreenHeader } from './ScreenHeader';
 import { NotesSection, Timeline } from './EntityFeed';
 import { STATUS_COLOR } from './EntityList';
 import { FollowUpsCard } from './FollowUpsCard';
+import { CallsCard } from './CallsCard';
 
 function useRefresh(): [number, () => void] {
   const [n, setN] = useState(0);
@@ -84,6 +85,7 @@ function ContactDetail({ id }: { id: string }): React.JSX.Element {
       </Card>
       <Tags tags={c.tags} />
       <CustomFields values={c.customFields} />
+      <CallsCard contactId={id} contactName={`${c.firstName} ${c.lastName}`} contactPhone={c.phone} />
       <FollowUpsCard relatedType="CONTACT" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="CONTACT" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="CONTACT" entityId={id} refreshToken={refreshToken} />

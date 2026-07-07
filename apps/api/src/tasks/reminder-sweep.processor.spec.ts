@@ -30,7 +30,7 @@ describe('ReminderSweepProcessor', () => {
     expect(add).toHaveBeenCalledWith(
       'send',
       { reminderId: 'r1' },
-      expect.objectContaining({ jobId: 'send:r1' }),
+      expect.objectContaining({ jobId: 'send_r1' }),
     );
     expect(result).toEqual({ claimed: 1 });
   });

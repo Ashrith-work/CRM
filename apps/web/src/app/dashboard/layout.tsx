@@ -11,6 +11,7 @@ const NAV = [
   { href: '/dashboard/deals', label: 'Deals' },
   { href: '/dashboard/tasks', label: 'Tasks' },
   { href: '/dashboard/calendar', label: 'Calendar' },
+  { href: '/dashboard/calls', label: 'Calls' },
   { href: '/dashboard/settings/custom-fields', label: 'Settings' },
 ];
 

@@ -24,7 +24,11 @@ export type Screen =
   | { name: 'agenda' }
   | { name: 'notifications' }
   // Milestone 4 — dashboard glance.
-  | { name: 'performance' };
+  | { name: 'performance' }
+  // Milestone 5 — calls.
+  | { name: 'callHistory' }
+  | { name: 'callDetail'; id: string }
+  | { name: 'logCall'; contactId?: string; contactName?: string };
 
 interface NavValue {
   current: Screen;

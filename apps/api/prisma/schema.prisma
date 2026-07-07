@@ -16,6 +16,8 @@ model Organization {
   clerkOrgId String?  @unique
   name       String
   slug       String   @unique
+  // Milestone 5 — maps an inbound MyOperator webhook (its company id) to this org.
+  myoperatorCompanyId String? @unique
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -48,6 +50,10 @@ model Organization {
   reminders     Reminder[]
   notifications Notification[]
   pushTokens    PushToken[]
+
+  // Milestone 5 — call management.
+  calls    Call[]
+  consents Consent[]
 
   @@index([slug])
 }
@@ -216,6 +222,10 @@ enum ActivityEventType {
   TASK_UPDATED
   TASK_COMPLETED
   TASK_CANCELLED
+  // Milestone 5 — calls.
+  CALL_LOGGED
+  CALL_COMPLETED
+  CALL_MISSED
 }
 
 model Company {
@@ -636,4 +646,106 @@ model PushToken {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, userId])
+}
+
+// ============================================================================
+// Milestone 5 — call management (MyOperator telephony + Cloudinary recordings +
+// DPDP consent). Idempotency: UNIQUE(organizationId, externalCallId). agentUserId
+// / contactId / dealId are soft scalar refs (no FK), matching M1–M4.
+// ============================================================================
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+  FAILED
+  NO_ANSWER
+}
+
+enum RecordingStatus {
+  NONE
+  PENDING
+  STORED
+  BLOCKED
+  FAILED
+}
+
+enum ConsentPurpose {
+  CALL_RECORDING
+}
+
+enum ConsentStatus {
+  GRANTED
+  WITHDRAWN
+  NOT_CAPTURED
+}
+
+enum ConsentSource {
+  IVR_DISCLOSURE
+  EXPLICIT
+}
+
+model Call {
+  id             String        @id @default(cuid())
+  organizationId String
+  direction      CallDirection
+  fromNumber     String
+  toNumber       String
+  agentUserId    String?
+  contactId      String?
+  dealId         String?
+  status         CallStatus    @default(RINGING)
+  startedAt      DateTime?
+  answeredAt     DateTime?
+  endedAt        DateTime?
+  durationSeconds Int?
+  disposition    String?
+  notes          String?
+  /** MyOperator's call id — the webhook idempotency key. */
+  externalCallId String?
+  /** True when the matched number resolved to >1 contact (picked most-recent). */
+  ambiguousMatch Boolean       @default(false)
+  /** Provider recording URL (internal; never served to clients). */
+  recordingSourceUrl String?
+  /** Cloudinary public id / secure URL once stored (served via a signed URL). */
+  recordingStoredUrl String?
+  recordingStatus RecordingStatus @default(NONE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Idempotency: a retried webhook for the same externalCallId upserts one row.
+  @@unique([organizationId, externalCallId])
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, contactId, startedAt])
+  @@index([organizationId, agentUserId, startedAt])
+  @@index([organizationId, direction, startedAt])
+}
+
+/** DPDP call-recording consent per contact. One row per (contact, purpose). */
+model Consent {
+  id             String         @id @default(cuid())
+  organizationId String
+  contactId      String
+  purpose        ConsentPurpose @default(CALL_RECORDING)
+  status         ConsentStatus  @default(NOT_CAPTURED)
+  source         ConsentSource?
+  grantedAt      DateTime?
+  withdrawnAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contactId, purpose])
+  @@index([organizationId, contactId])
 }
