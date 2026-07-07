@@ -26,6 +26,7 @@ import { TelephonyModule } from './telephony/telephony.module';
 import { ConsentsModule } from './consents/consents.module';
 import { RecordingsModule } from './recordings/recordings.module';
 import { CallsModule } from './calls/calls.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -69,6 +70,8 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     ConsentsModule,
     RecordingsModule,
     CallsModule,
+    // M0 retrofit — integrations directory (Configure).
+    IntegrationsModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

@@ -7,6 +7,7 @@ export * from './notifications';
 export * from './users';
 export * from './dashboard';
 export * from './calls';
+export * from './integrations';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -37,4 +38,6 @@ export const API_ROUTES = {
   calls: `/${API_PREFIX}/calls`,
   consents: `/${API_PREFIX}/consents`,
   myoperatorWebhook: `/${API_PREFIX}/webhooks/myoperator`,
+  // M0 retrofit — integrations.
+  integrations: `/${API_PREFIX}/integrations`,
 } as const;

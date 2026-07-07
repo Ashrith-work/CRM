@@ -675,6 +675,17 @@ async function seedPrimaryOrg(): Promise<void> {
   await chunkCreate((rows) => prisma.activityEvent.createMany({ data: rows }), callActivity);
   bump('calls', callRows.length);
   bump('activityEvents', callActivity.length);
+
+  // ----- Integrations (Configure) ----------------------------------------
+  const cloudinaryConnected = !!(process.env.CLOUDINARY_URL || process.env.CLOUDINARY_CLOUD_NAME);
+  await prisma.integration.createMany({
+    data: [
+      { id: mkId('int'), organizationId: org.id, provider: 'CLERK', status: 'CONNECTED', connectedById: adminId, connectedAt: HISTORY_START, config: { note: 'Authentication' } },
+      { id: mkId('int'), organizationId: org.id, provider: 'MYOPERATOR', status: 'CONNECTED', externalAccountId: process.env.MYOPERATOR_COMPANY_ID || 'moc_acme', connectedById: adminId, connectedAt: HISTORY_START, config: { callerId: '+911140001234' } },
+      { id: mkId('int'), organizationId: org.id, provider: 'CLOUDINARY', status: cloudinaryConnected ? 'CONNECTED' : 'DISCONNECTED', connectedById: cloudinaryConnected ? adminId : null, connectedAt: cloudinaryConnected ? HISTORY_START : null, config: { folder: 'crm/recordings', region: 'India' } },
+    ],
+  });
+  bump('integrations', 3);
 }
 
 // ---------------------------------------------------------------------------
@@ -727,6 +738,7 @@ async function seedSecondOrg(): Promise<void> {
 // Re-run: clear seeded tables (children first, FK-safe).
 // ---------------------------------------------------------------------------
 async function clearAll(): Promise<void> {
+  await prisma.integration.deleteMany();
   await prisma.call.deleteMany();
   await prisma.consent.deleteMany();
   await prisma.reminder.deleteMany();

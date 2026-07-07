@@ -55,7 +55,40 @@ model Organization {
   calls    Call[]
   consents Consent[]
 
+  // M0 retrofit — connected third-party integrations.
+  integrations Integration[]
+
   @@index([slug])
+}
+
+/** Status of a connected third-party integration. */
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+/**
+ * A third-party integration for an org (e.g. MYOPERATOR, CLOUDINARY, CLERK).
+ * Stores only NON-SECRET config/metadata; secrets live in env/secret storage.
+ */
+model Integration {
+  id                String            @id @default(cuid())
+  organizationId    String
+  provider          String
+  status            IntegrationStatus @default(DISCONNECTED)
+  externalAccountId String?
+  config            Json              @default("{}")
+  connectedById     String?
+  connectedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider])
+  @@index([organizationId, deletedAt])
 }
 
 model User {

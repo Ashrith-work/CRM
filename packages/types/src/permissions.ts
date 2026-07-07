@@ -53,6 +53,10 @@ export const PERMISSIONS = {
   CALL_MANAGE: 'call:manage',
   CONSENT_READ: 'consent:read',
   CONSENT_MANAGE: 'consent:manage',
+
+  // M0 retrofit — third-party integrations (Configure).
+  INTEGRATION_READ: 'integration:read',
+  INTEGRATION_MANAGE: 'integration:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -112,6 +116,9 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.CALL_MANAGE,
     PERMISSIONS.CONSENT_READ,
     PERMISSIONS.CONSENT_MANAGE,
+    // Integrations (Configure) — admins connect/disconnect.
+    PERMISSIONS.INTEGRATION_READ,
+    PERMISSIONS.INTEGRATION_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -137,5 +144,7 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.CALL_MANAGE,
     PERMISSIONS.CONSENT_READ,
     PERMISSIONS.CONSENT_MANAGE,
+    // Reps can VIEW integrations but not connect/disconnect (proves the 403 path).
+    PERMISSIONS.INTEGRATION_READ,
   ],
 };

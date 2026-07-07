@@ -116,6 +116,11 @@ import {
   type RecordingUrlResponse,
   type SetConsentInput,
   type UpdateCallInput,
+  IntegrationSchema,
+  IntegrationListResponseSchema,
+  type Integration,
+  type ConnectIntegrationInput,
+  type IntegrationListResponse,
 } from '@crm/types';
 import { z, type ZodType } from 'zod';
 
@@ -574,4 +579,18 @@ export function listConsents(getToken: TokenGetter, contactId: string): Promise<
 }
 export function setConsent(getToken: TokenGetter, body: SetConsentInput): Promise<Consent> {
   return request(getToken, API_ROUTES.consents, ConsentSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+
+// --- Integrations (M0 retrofit) ---------------------------------------------
+export function listIntegrations(getToken: TokenGetter): Promise<IntegrationListResponse> {
+  return request(getToken, API_ROUTES.integrations, IntegrationListResponseSchema);
+}
+export function connectIntegration(getToken: TokenGetter, body: ConnectIntegrationInput): Promise<Integration> {
+  return request(getToken, `${API_ROUTES.integrations}/connect`, IntegrationSchema, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+export function disconnectIntegration(getToken: TokenGetter, id: string): Promise<Integration> {
+  return request(getToken, `${API_ROUTES.integrations}/${id}/disconnect`, IntegrationSchema, { method: 'POST' });
 }

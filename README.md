@@ -240,6 +240,8 @@ and audit-logged. List endpoints are cursor-paginated and return
 | GET | `/api/v1/calls/:id/recording` | `call:read` | short-lived **signed** Cloudinary URL — **consent-gated** (null url + reason otherwise) |
 | GET/POST | `/api/v1/consents` | `consent:read` / `consent:manage` | `?contactId=`; POST `{ contactId, status: GRANTED\|WITHDRAWN, source? }` — withdraw **purges** stored recordings |
 | POST | `/api/v1/webhooks/myoperator` | **Public** (HMAC-verified) | inbound/outbound events; **idempotent** on `(org, externalCallId)` |
+| GET | `/api/v1/integrations` | `integration:read` | connected third-party providers (Configure) |
+| POST | `/api/v1/integrations/connect` \| `/:id/disconnect` | `integration:manage` | connect/disconnect; **members get 403 `{ code: FORBIDDEN }`** |
 
 ### Call management (M5)
 
@@ -401,6 +403,24 @@ probability / 100` (rounded, integer).
   (`GRANTED`/`WITHDRAWN`/`NOT_CAPTURED`), source (`IVR_DISCLOSURE`/`EXPLICIT`),
   grantedAt/withdrawnAt — UNIQUE(organizationId, contactId, purpose)
 - Blocked-recording attempts reuse **AuditLog** (`action = recording.blocked`).
+
+### M0 retrofit — foundation shell
+
+A later M0-foundation spec was reconciled **additively** onto this repo (rather
+than rebuilt, which would break M1–M5):
+
+- **Integration** model — org-scoped connected providers (CLERK / MYOPERATOR /
+  CLOUDINARY / …), status + non-secret config; secrets stay in env. UNIQUE(org,
+  provider). Managed via `/api/v1/integrations` (Configure).
+- **RBAC 403 carries a machine `code: "FORBIDDEN"`** so clients can branch on it.
+- **Web dashboard shell** — job-to-be-done nav (**Understand / Act / Support /
+  Configure**), a **light/dark theme toggle**, an `EmptyState` component, and an
+  Integrations page under Configure.
+- Kept as-is (already satisfied M0): pnpm monorepo, Clerk + JWT guard, audit
+  interceptor (one row per mutation), Redis/BullMQ, CI (`ci.yml`) + `deploy.yml`.
+  NOT changed (would break M1–M5): the `owner/admin/member` roles (spec's 5-role
+  set), `packages/types` (vs `db`/`shared`/`ui`), and in-process workers (vs a
+  separate `apps/worker`).
 
 ## RBAC model
 

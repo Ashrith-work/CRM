@@ -37,9 +37,15 @@ describe('PermissionsGuard', () => {
     expect(new PermissionsGuard(reflector).canActivate(ctx)).toBe(true);
   });
 
-  it('denies (403) when the user is missing a required permission', () => {
+  it('denies (403) with a machine code FORBIDDEN when missing a permission', () => {
     const { ctx, reflector } = buildContext(memberContext, ['audit:read']);
-    expect(() => new PermissionsGuard(reflector).canActivate(ctx)).toThrow(ForbiddenException);
+    try {
+      new PermissionsGuard(reflector).canActivate(ctx);
+      throw new Error('expected a ForbiddenException');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as ForbiddenException).getResponse()).toMatchObject({ statusCode: 403, code: 'FORBIDDEN' });
+    }
   });
 
   it('requires ALL listed permissions (least privilege)', () => {
