@@ -46,9 +46,7 @@ function Form({ pipelines, contacts }: { pipelines: Pipeline[]; contacts: Contac
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await createDeal(token, {
+      await createDeal(getToken, {
         name: name.trim(),
         pipelineId,
         amountMinor: amount.trim() ? parseAmountToMinor(amount) : 0,

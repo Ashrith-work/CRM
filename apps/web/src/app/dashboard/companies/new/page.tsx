@@ -30,8 +30,6 @@ export default function NewCompanyPage() {
           submitLabel="Create company"
           onCancel={() => router.push('/dashboard/companies')}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: CreateCompanyInput = {
               name: core.name ?? '',
               domain: core.domain || undefined,
@@ -42,7 +40,7 @@ export default function NewCompanyPage() {
               customFields,
               tagIds,
             };
-            const created = await createCompany(token, body);
+            const created = await createCompany(getToken, body);
             router.push(`/dashboard/companies/${created.id}`);
           }}
         />

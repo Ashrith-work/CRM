@@ -15,8 +15,7 @@ export default function NewContactPage() {
 
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (token) setCompanies((await listCompanies(token, { limit: 100 })).data);
+      if (getToken) setCompanies((await listCompanies(getToken, { limit: 100 })).data);
     })();
   }, [getToken]);
 
@@ -44,8 +43,6 @@ export default function NewContactPage() {
           submitLabel="Create contact"
           onCancel={() => router.push('/dashboard/contacts')}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: CreateContactInput = {
               firstName: core.firstName ?? '',
               lastName: core.lastName ?? '',
@@ -56,7 +53,7 @@ export default function NewContactPage() {
               customFields,
               tagIds,
             };
-            const created = await createContact(token, body);
+            const created = await createContact(getToken, body);
             router.push(`/dashboard/contacts/${created.id}`);
           }}
         />

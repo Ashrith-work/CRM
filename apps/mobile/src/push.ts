@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { useAuth } from '@clerk/clerk-expo';
-import { registerPushToken } from './api';
+import { registerPushToken, type TokenGetter } from './api';
 
 /**
  * Expo push registration + tap routing. Everything here is best-effort: Expo Go
@@ -45,7 +45,7 @@ function extractTaskId(data: unknown): string | null {
   return null;
 }
 
-async function registerDevice(getToken: () => Promise<string | null>): Promise<void> {
+async function registerDevice(getToken: TokenGetter): Promise<void> {
   try {
     if (!Device.isDevice) return; // simulators can't get a token
     const current = await Notifications.getPermissionsAsync();
@@ -62,9 +62,7 @@ async function registerDevice(getToken: () => Promise<string | null>): Promise<v
     const expoToken = resp.data;
     if (!expoToken) return;
 
-    const apiToken = await getToken();
-    if (!apiToken) return;
-    await registerPushToken(apiToken, {
+    await registerPushToken(getToken, {
       token: expoToken,
       platform: Platform.OS === 'ios' ? 'IOS' : 'ANDROID',
     });

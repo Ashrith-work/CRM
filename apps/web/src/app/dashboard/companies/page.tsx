@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@clerk/nextjs';
 import type { Company, Tag } from '@crm/types';
-import { listCompanies, listTags, type ListParams } from '@/lib/api';
+import { listCompanies, listTags, type ListParams, type TokenGetter } from '@/lib/api';
 import { DataTable, type Column } from '@/components/crm/DataTable';
 import { Button, PageHeader, TagBadge } from '@/components/crm/ui';
 
@@ -34,13 +34,12 @@ export default function CompaniesPage() {
 
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (token) setTags((await listTags(token)).data);
+      if (getToken) setTags((await listTags(getToken)).data);
     })();
   }, [getToken]);
 
   const fetchPage = useCallback(
-    (token: string, params: ListParams) => listCompanies(token, { ...params, tagId: tagId || undefined }),
+    (getToken: TokenGetter, params: ListParams) => listCompanies(getToken, { ...params, tagId: tagId || undefined }),
     [tagId],
   );
 

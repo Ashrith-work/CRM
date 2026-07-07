@@ -39,9 +39,7 @@ export default function CalendarPage() {
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      const page = await listTasks(token, {
+      const page = await listTasks(getToken, {
         from: start.toISOString(),
         to: end.toISOString(),
         bucket: 'all',

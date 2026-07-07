@@ -91,10 +91,8 @@ export function TaskForm({
 
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (!token) return;
       try {
-        setUsers((await listUsers(token)).data);
+        setUsers((await listUsers(getToken)).data);
       } catch {
         /* best-effort */
       }
@@ -107,21 +105,19 @@ export function TaskForm({
       setRelatedOptions([]);
       return;
     }
-    const token = await getToken();
-    if (!token) return;
     const opts: RelatedOption[] = [];
     if (relatedType === 'CONTACT') {
-      (await listContacts(token, { limit: 100 })).data.forEach((c) =>
+      (await listContacts(getToken, { limit: 100 })).data.forEach((c) =>
         opts.push({ type: 'CONTACT', id: c.id, label: `${c.firstName} ${c.lastName}` }),
       );
     } else if (relatedType === 'COMPANY') {
-      (await listCompanies(token, { limit: 100 })).data.forEach((c) => opts.push({ type: 'COMPANY', id: c.id, label: c.name }));
+      (await listCompanies(getToken, { limit: 100 })).data.forEach((c) => opts.push({ type: 'COMPANY', id: c.id, label: c.name }));
     } else if (relatedType === 'LEAD') {
-      (await listLeads(token, { limit: 100 })).data.forEach((l) =>
+      (await listLeads(getToken, { limit: 100 })).data.forEach((l) =>
         opts.push({ type: 'LEAD', id: l.id, label: `${l.firstName} ${l.lastName}` }),
       );
     } else if (relatedType === 'DEAL') {
-      (await listDeals(token, { limit: 100 })).data.forEach((d) => opts.push({ type: 'DEAL', id: d.id, label: d.name }));
+      (await listDeals(getToken, { limit: 100 })).data.forEach((d) => opts.push({ type: 'DEAL', id: d.id, label: d.name }));
     }
     setRelatedOptions(opts);
   }, [getToken, relatedType, prefill?.relatedId, prefill?.relatedType]);

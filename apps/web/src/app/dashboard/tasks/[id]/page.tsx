@@ -14,6 +14,7 @@ import {
   reassignTask,
   rescheduleTask,
   snoozeTask,
+  type TokenGetter,
 } from '@/lib/api';
 import { Button, Card, ErrorPanel, PageHeader, Row, Spinner, actorName, formatDate } from '@/components/crm/ui';
 import { Timeline } from '@/components/crm/Timeline';
@@ -47,9 +48,7 @@ export default function TaskDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      const t = await getTask(token, id);
+      const t = await getTask(getToken, id);
       setTask(t);
       setOutcome(t.outcome ?? '');
       setWhen(toLocalInput(taskAnchorIso(t)));
@@ -64,18 +63,15 @@ export default function TaskDetailPage() {
   }, [load]);
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (token) setUsers((await listUsers(token)).data);
+      if (getToken) setUsers((await listUsers(getToken)).data);
     })();
   }, [getToken]);
 
-  const run = async (fn: (token: string) => Promise<unknown>) => {
+  const run = async (fn: (getToken: TokenGetter) => Promise<unknown>) => {
     setBusy(true);
     setError('');
     try {
-      const token = await getToken();
-      if (!token) return;
-      await fn(token);
+      await fn(getToken);
       setPanel('');
       await load();
       setTimelineKey((k) => k + 1);
@@ -88,9 +84,7 @@ export default function TaskDetailPage() {
 
   const remove = async () => {
     if (!confirm('Delete this task?')) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteTask(token, id);
+    await deleteTask(getToken, id);
     router.push('/dashboard/tasks');
   };
 

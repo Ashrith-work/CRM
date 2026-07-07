@@ -27,9 +27,7 @@ export default function ContactDetailPage() {
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setState({ status: 'ready', contact: await getContact(token, id) });
+      setState({ status: 'ready', contact: await getContact(getToken, id) });
     } catch (err) {
       setState({ status: 'error', message: (err as Error).message });
     }
@@ -41,9 +39,7 @@ export default function ContactDetailPage() {
 
   const remove = async () => {
     if (!confirm('Delete this contact?')) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteContact(token, id);
+    await deleteContact(getToken, id);
     router.push('/dashboard/contacts');
   };
 

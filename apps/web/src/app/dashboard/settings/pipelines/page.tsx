@@ -12,6 +12,7 @@ import {
   reorderStages,
   updatePipeline,
   updateStage,
+  type TokenGetter,
 } from '@/lib/api';
 import { Button, Card, ErrorPanel, PageHeader, Spinner } from '@/components/crm/ui';
 
@@ -25,12 +26,10 @@ export default function PipelineAdminPage() {
   const [newPipeline, setNewPipeline] = useState('');
 
   const withToken = useCallback(
-    async <T,>(fn: (token: string) => Promise<T>): Promise<T | undefined> => {
+    async <T,>(fn: (getToken: TokenGetter) => Promise<T>): Promise<T | undefined> => {
       setError('');
       try {
-        const token = await getToken();
-        if (!token) throw new Error('No session token available');
-        return await fn(token);
+        return await fn(getToken);
       } catch (err) {
         setError((err as Error).message);
       }
@@ -90,7 +89,7 @@ function PipelineEditor({
   onChange,
 }: {
   pipeline: Pipeline;
-  withToken: <T>(fn: (token: string) => Promise<T>) => Promise<T | undefined>;
+  withToken: <T>(fn: (getToken: TokenGetter) => Promise<T>) => Promise<T | undefined>;
   onChange: () => Promise<void>;
 }) {
   const [name, setName] = useState(pipeline.name);
@@ -191,7 +190,7 @@ function StageRow({
   isLast: boolean;
   onUp: () => void;
   onDown: () => void;
-  withToken: <T>(fn: (token: string) => Promise<T>) => Promise<T | undefined>;
+  withToken: <T>(fn: (getToken: TokenGetter) => Promise<T>) => Promise<T | undefined>;
   onChange: () => Promise<void>;
 }) {
   const [name, setName] = useState(stage.name);

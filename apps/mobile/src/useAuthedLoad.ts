@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
+import type { TokenGetter } from './api';
 
 export type LoadState<T> =
   | { status: 'loading' }
@@ -7,11 +8,13 @@ export type LoadState<T> =
   | { status: 'ready'; data: T };
 
 /**
- * The house async-screen pattern (loading | error | ready) wired to Clerk's
- * getToken. Returns the state plus a `reload` for Retry / after-mutation refresh.
+ * The house async-screen pattern (loading | error | ready). The loader receives
+ * Clerk's `getToken` (not a pre-fetched string) and hands it to the api client,
+ * which fetches a fresh token per request and refreshes+retries once on a 401.
+ * Returns the state plus a `reload` for Retry / after-mutation refresh.
  */
 export function useAuthedLoad<T>(
-  fn: (token: string) => Promise<T>,
+  fn: (getToken: TokenGetter) => Promise<T>,
   deps: unknown[],
 ): { state: LoadState<T>; reload: () => Promise<void> } {
   const { getToken } = useAuth();
@@ -20,9 +23,7 @@ export function useAuthedLoad<T>(
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      setState({ status: 'ready', data: await fn(token) });
+      setState({ status: 'ready', data: await fn(getToken) });
     } catch (err) {
       setState({ status: 'error', message: (err as Error).message });
     }

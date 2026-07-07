@@ -68,9 +68,7 @@ export function Timeline({
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await listActivity(token, entityType, entityId);
+      const res = await listActivity(getToken, entityType, entityId);
       setEvents(res.data);
     } catch (err) {
       setError((err as Error).message);

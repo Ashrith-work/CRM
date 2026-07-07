@@ -36,9 +36,7 @@ export function PipelineScreen(): React.JSX.Element {
       setLoading(true);
       setError(null);
       try {
-        const token = await getToken();
-        if (!token) throw new Error('No session token');
-        const b = await getBoard(token, pid);
+        const b = await getBoard(getToken, pid);
         setBoard(b);
         setStageId((cur) =>
           cur && b.columns.some((c) => c.stage.id === cur) ? cur : (b.columns[0]?.stage.id ?? null),
@@ -56,9 +54,7 @@ export function PipelineScreen(): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      const res = await listPipelines(token);
+      const res = await listPipelines(getToken);
       setPipelines(res.data);
       const def = res.data.find((p) => p.isDefault) ?? res.data[0];
       if (!def) {

@@ -17,9 +17,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      const me = await fetchMe(token);
+      const me = await fetchMe(getToken);
       setState({ status: 'ready', me });
     } catch (err) {
       setState({ status: 'error', message: (err as Error).message });

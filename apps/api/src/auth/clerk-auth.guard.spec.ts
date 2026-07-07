@@ -1,7 +1,7 @@
-import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, Logger, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ClerkAuthGuard } from './clerk-auth.guard';
-import type { ClerkService } from './clerk.service';
+import { ClerkService, TokenVerificationFailure } from './clerk.service';
 import type { UserContextService } from './user-context.service';
 import type { UserContext } from './auth.types';
 
@@ -45,15 +45,30 @@ describe('ClerkAuthGuard', () => {
     expect(clerk.verifyToken).not.toHaveBeenCalled();
   });
 
-  it('rejects a request with no bearer token (401)', async () => {
-    const ctx = buildContext({ headers: {} });
+  it('rejects a request with no bearer token (401, logged "missing")', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const ctx = buildContext({ headers: {}, method: 'GET', url: '/api/v1/contacts' });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('401 missing'));
+    warn.mockRestore();
   });
 
-  it('rejects an expired/invalid token (401)', async () => {
-    clerk.verifyToken.mockRejectedValue(new Error('token expired'));
-    const ctx = buildContext({ headers: { authorization: 'Bearer expired' } });
+  it('rejects an expired token (401) and logs the reason as "expired"', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    clerk.verifyToken.mockRejectedValue(new TokenVerificationFailure('expired', 'token-expired'));
+    const ctx = buildContext({ headers: { authorization: 'Bearer expired' }, method: 'GET', url: '/api/v1/contacts' });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('401 expired'));
+    warn.mockRestore();
+  });
+
+  it('rejects a tampered token (401) and logs "invalid-signature"', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    clerk.verifyToken.mockRejectedValue(new TokenVerificationFailure('invalid-signature', 'token-invalid-signature'));
+    const ctx = buildContext({ headers: { authorization: 'Bearer tampered' }, method: 'GET', url: '/api/v1/contacts' });
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('401 invalid-signature'));
+    warn.mockRestore();
   });
 
   it('rejects a valid token for an unprovisioned user (403)', async () => {

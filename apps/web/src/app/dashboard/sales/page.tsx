@@ -68,10 +68,8 @@ export default function SalesDashboardPage() {
   // Load pipelines once.
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (!token) return;
       try {
-        const res = await listPipelines(token);
+        const res = await listPipelines(getToken);
         setPipelines(res.data);
       } catch {
         /* pipeline filter is optional */
@@ -83,14 +81,12 @@ export default function SalesDashboardPage() {
     if (!periodReady) return;
     setStatus('loading');
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
       const pipeParam = pipelineId ? { pipelineId } : {};
 
       const [tilesRes, funnelRes] = await Promise.all([
-        getSalesTiles(token, { ...periodParams, ...pipeParam }),
+        getSalesTiles(getToken, { ...periodParams, ...pipeParam }),
         funnelPipelineId
-          ? getFunnel(token, { ...periodParams, pipelineId: funnelPipelineId })
+          ? getFunnel(getToken, { ...periodParams, pipelineId: funnelPipelineId })
           : Promise.resolve(null),
       ]);
       setTiles(tilesRes);
@@ -98,7 +94,7 @@ export default function SalesDashboardPage() {
 
       // Team is manager/owner-only — reps get 403; hide the section silently.
       try {
-        setTeam(await getTeam(token, periodParams));
+        setTeam(await getTeam(getToken, periodParams));
       } catch {
         setTeam(null);
       }
@@ -116,11 +112,9 @@ export default function SalesDashboardPage() {
   // Trends load independently (its own metric/interval controls).
   const loadTrends = useCallback(async () => {
     if (!periodReady) return;
-    const token = await getToken();
-    if (!token) return;
     try {
       const pipeParam = pipelineId ? { pipelineId } : {};
-      setTrends(await getTrends(token, { ...periodParams, metric, interval, ...pipeParam }));
+      setTrends(await getTrends(getToken, { ...periodParams, metric, interval, ...pipeParam }));
     } catch {
       setTrends(null);
     }

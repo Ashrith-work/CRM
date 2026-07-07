@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LEAD_STATUSES, type Lead, type Tag } from '@crm/types';
 import { useAuth } from '@clerk/nextjs';
-import { listLeads, listTags, type ListParams } from '@/lib/api';
+import { listLeads, listTags, type ListParams, type TokenGetter } from '@/lib/api';
 import { DataTable, type Column } from '@/components/crm/DataTable';
 import { Button, PageHeader, TagBadge } from '@/components/crm/ui';
 
@@ -51,14 +51,13 @@ export default function LeadsPage() {
 
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (token) setTags((await listTags(token)).data);
+      if (getToken) setTags((await listTags(getToken)).data);
     })();
   }, [getToken]);
 
   const fetchPage = useCallback(
-    (token: string, params: ListParams) =>
-      listLeads(token, {
+    (getToken: TokenGetter, params: ListParams) =>
+      listLeads(getToken, {
         ...params,
         tagId: tagId || undefined,
         status: (status || undefined) as ListParams['status'],

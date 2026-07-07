@@ -28,9 +28,7 @@ export default function LeadDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setLead(await getLead(token, id));
+      setLead(await getLead(getToken, id));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -43,9 +41,7 @@ export default function LeadDetailPage() {
   const changeStatus = async (status: LeadStatus) => {
     setBusy(true);
     try {
-      const token = await getToken();
-      if (!token) return;
-      setLead(await updateLeadStatus(token, id, status));
+      setLead(await updateLeadStatus(getToken, id, status));
       setTimelineKey((k) => k + 1);
     } catch (err) {
       setError((err as Error).message);
@@ -58,9 +54,7 @@ export default function LeadDetailPage() {
     setBusy(true);
     setError('');
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await convertLead(token, id, { companyName: companyName.trim() || undefined });
+      const res = await convertLead(getToken, id, { companyName: companyName.trim() || undefined });
       router.push(`/dashboard/contacts/${res.contact.id}`);
     } catch (err) {
       setError((err as Error).message);
@@ -70,9 +64,7 @@ export default function LeadDetailPage() {
 
   const remove = async () => {
     if (!confirm('Delete this lead?')) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteLead(token, id);
+    await deleteLead(getToken, id);
     router.push('/dashboard/leads');
   };
 

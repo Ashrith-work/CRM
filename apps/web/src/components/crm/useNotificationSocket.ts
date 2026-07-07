@@ -25,11 +25,9 @@ export function useNotificationSocket(recentLimit = 10): {
   const socketRef = useRef<Socket | null>(null);
 
   const reload = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
     const [list, count] = await Promise.all([
-      listNotifications(token, { limit: recentLimit }),
-      getUnreadCount(token),
+      listNotifications(getToken, { limit: recentLimit }),
+      getUnreadCount(getToken),
     ]);
     setRecent(list.data);
     setUnreadCount(count.count);
@@ -37,18 +35,14 @@ export function useNotificationSocket(recentLimit = 10): {
 
   const markRead = useCallback(
     async (id: string) => {
-      const token = await getToken();
-      if (!token) return;
-      await markNotificationRead(token, id);
+      await markNotificationRead(getToken, id);
       setRecent((prev) => prev.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n)));
     },
     [getToken],
   );
 
   const markAll = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
-    await markAllNotificationsRead(token);
+    await markAllNotificationsRead(getToken);
     setRecent((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
     setUnreadCount(0);
   }, [getToken]);

@@ -5,7 +5,7 @@ import type { Deal, Pipeline } from '@crm/types';
 import { Card, colors, ErrorBox, Loading, Pill, PrimaryButton, Row, SecondaryButton } from '../ui';
 import { useAuthedLoad } from '../useAuthedLoad';
 import { useNav } from '../navigation';
-import { formatMoney, getDeal, getPipeline, moveDeal, reopenDeal } from '../api';
+import { formatMoney, getDeal, getPipeline, moveDeal, reopenDeal, type TokenGetter } from '../api';
 import { ScreenHeader } from './ScreenHeader';
 import { NotesSection, Timeline } from './EntityFeed';
 import { stageColor } from './PipelineScreen';
@@ -29,13 +29,11 @@ export function DealDetail({ id }: { id: string }): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const run = async (fn: (token: string) => Promise<unknown>) => {
+  const run = async (fn: (getToken: TokenGetter) => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await fn(token);
+      await fn(getToken);
       await reload();
       bump();
     } catch (err) {

@@ -20,9 +20,7 @@ export default function EditTaskPage() {
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setState({ status: 'ready', task: await getTask(token, id) });
+      setState({ status: 'ready', task: await getTask(getToken, id) });
     } catch (err) {
       setState({ status: 'error', message: (err as Error).message });
     }
@@ -44,9 +42,7 @@ export default function EditTaskPage() {
           submitLabel="Save changes"
           onCancel={() => router.push(`/dashboard/tasks/${id}`)}
           onSubmit={async (body: CreateTaskInput) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
-            await updateTask(token, id, body);
+            await updateTask(getToken, id, body);
             router.push(`/dashboard/tasks/${id}`);
           }}
         />

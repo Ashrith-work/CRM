@@ -29,10 +29,8 @@ export default function TasksPage() {
 
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (!token) return;
       try {
-        setUsers((await listUsers(token)).data);
+        setUsers((await listUsers(getToken)).data);
       } catch {
         /* directory is best-effort for the filter */
       }
@@ -43,8 +41,6 @@ export default function TasksPage() {
     async (append: boolean) => {
       if (!append) setStatus('loading');
       try {
-        const token = await getToken();
-        if (!token) throw new Error('No session token available');
         const params: TaskListParams = {
           bucket: (bucket || undefined) as TaskListParams['bucket'],
           type: (type || undefined) as TaskListParams['type'],
@@ -53,7 +49,7 @@ export default function TasksPage() {
           cursor: append && cursor ? cursor : undefined,
           limit: 25,
         };
-        const page = await listTasks(token, params);
+        const page = await listTasks(getToken, params);
         setTasks((prev) => (append ? [...prev, ...page.data] : page.data));
         setCursor(page.nextCursor);
         setStatus('ready');

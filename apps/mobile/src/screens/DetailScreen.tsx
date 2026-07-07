@@ -5,7 +5,7 @@ import type { EntityType, LeadStatus } from '@crm/types';
 import { LEAD_STATUSES } from '@crm/types';
 import { Card, colors, ErrorBox, Loading, Pill, PrimaryButton, Row, SecondaryButton } from '../ui';
 import { useAuthedLoad } from '../useAuthedLoad';
-import { getCompany, getContact, getLead, convertLead, updateLeadStatus } from '../api';
+import { getCompany, getContact, getLead, convertLead, updateLeadStatus, type TokenGetter } from '../api';
 import { ScreenHeader } from './ScreenHeader';
 import { NotesSection, Timeline } from './EntityFeed';
 import { STATUS_COLOR } from './EntityList';
@@ -124,13 +124,11 @@ function LeadDetail({ id }: { id: string }): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const run = async (fn: (token: string) => Promise<unknown>) => {
+  const run = async (fn: (getToken: TokenGetter) => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await fn(token);
+      await fn(getToken);
       await reload();
       bump();
     } catch (err) {

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Deal } from '@crm/types';
-import { listDeals, type DealListParams, type ListParams } from '@/lib/api';
+import { listDeals, type DealListParams, type ListParams, type TokenGetter } from '@/lib/api';
 import { DataTable, type Column } from '@/components/crm/DataTable';
 import { Button, PageHeader, formatMoney, dateOnly } from '@/components/crm/ui';
 
@@ -32,9 +32,9 @@ export default function DealsListPage() {
   ];
 
   const fetchPage = useMemo(
-    () => (token: string, params: ListParams) => {
+    () => (getToken: TokenGetter, params: ListParams) => {
       const p: DealListParams = { ...params, status: (status || undefined) as DealListParams['status'] };
-      return listDeals(token, p);
+      return listDeals(getToken, p);
     },
     [status],
   );

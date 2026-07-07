@@ -24,9 +24,7 @@ export function TasksSection({
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await listTasks(token, { relatedType, relatedId, limit: 50 });
+      const res = await listTasks(getToken, { relatedType, relatedId, limit: 50 });
       setTasks(res.data);
     } catch (err) {
       setError((err as Error).message);

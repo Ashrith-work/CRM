@@ -20,9 +20,7 @@ export function NotificationList(): React.JSX.Element {
 
   const open = async (n: Notification) => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      if (!n.readAt) await markNotificationRead(token, n.id);
+      if (!n.readAt) await markNotificationRead(getToken, n.id);
       if (n.taskId) push({ name: 'taskDetail', id: n.taskId });
       else await reload();
     } catch {
@@ -34,9 +32,7 @@ export function NotificationList(): React.JSX.Element {
   const markAll = async () => {
     setBusy(true);
     try {
-      const token = await getToken();
-      if (!token) return;
-      await markAllNotificationsRead(token);
+      await markAllNotificationsRead(getToken);
       await reload();
     } finally {
       setBusy(false);

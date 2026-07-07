@@ -26,9 +26,7 @@ export default function NotificationsPage() {
     async (append: boolean) => {
       if (!append) setStatus('loading');
       try {
-        const token = await getToken();
-        if (!token) throw new Error('No session token available');
-        const page = await listNotifications(token, { limit: 25, cursor: append && cursor ? cursor : undefined });
+        const page = await listNotifications(getToken, { limit: 25, cursor: append && cursor ? cursor : undefined });
         setItems((prev) => (append ? [...prev, ...page.data] : page.data));
         setCursor(page.nextCursor);
         setStatus('ready');
@@ -46,18 +44,15 @@ export default function NotificationsPage() {
   }, []);
 
   const open = async (n: Notification) => {
-    const token = await getToken();
-    if (token && !n.readAt) {
-      await markNotificationRead(token, n.id);
+    if (getToken && !n.readAt) {
+      await markNotificationRead(getToken, n.id);
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)));
     }
     router.push(href(n));
   };
 
   const markAll = async () => {
-    const token = await getToken();
-    if (!token) return;
-    await markAllNotificationsRead(token);
+    await markAllNotificationsRead(getToken);
     setItems((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })));
   };
 

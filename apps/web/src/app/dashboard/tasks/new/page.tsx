@@ -27,9 +27,7 @@ function NewTaskForm() {
           submitLabel="Create task"
           onCancel={() => router.back()}
           onSubmit={async (body: CreateTaskInput) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
-            const created = await createTask(token, body);
+            const created = await createTask(getToken, body);
             router.push(`/dashboard/tasks/${created.id}`);
           }}
         />

@@ -28,9 +28,7 @@ export function NoteList({
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await listNotes(token, entityType, entityId);
+      const res = await listNotes(getToken, entityType, entityId);
       setNotes(res.data);
     } catch (err) {
       setError((err as Error).message);
@@ -47,9 +45,7 @@ export function NoteList({
     setBusy(true);
     setError('');
     try {
-      const token = await getToken();
-      if (!token) return;
-      const note = await createNote(token, { entityType, entityId, body: text });
+      const note = await createNote(getToken, { entityType, entityId, body: text });
       setNotes((prev) => [note, ...prev]);
       setBody('');
       onAdded?.();

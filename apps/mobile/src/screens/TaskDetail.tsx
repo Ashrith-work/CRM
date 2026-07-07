@@ -5,7 +5,7 @@ import type { OrgUser, Task } from '@crm/types';
 import { Card, colors, ErrorBox, Loading, Pill, PrimaryButton, Row, SecondaryButton } from '../ui';
 import { useAuthedLoad } from '../useAuthedLoad';
 import { useNav } from '../navigation';
-import { completeTask, getTask, listUsers, reassignTask, snoozeTask } from '../api';
+import { completeTask, getTask, listUsers, reassignTask, snoozeTask, type TokenGetter } from '../api';
 import { ScreenHeader } from './ScreenHeader';
 import { formatWhen, PRIORITY_COLOR, TYPE_LABEL } from './taskShared';
 
@@ -28,13 +28,11 @@ export function TaskDetail({ id }: { id: string }): React.JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showReassign, setShowReassign] = useState(false);
 
-  const run = async (fn: (token: string) => Promise<unknown>) => {
+  const run = async (fn: (getToken: TokenGetter) => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await fn(token);
+      await fn(getToken);
       await reload();
     } catch (err) {
       setActionError((err as Error).message);

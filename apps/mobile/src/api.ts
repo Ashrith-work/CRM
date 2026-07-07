@@ -76,28 +76,56 @@ export function apiBaseUrl(): string {
   return API_URL;
 }
 
+/**
+ * Fetches a FRESH Clerk token immediately before each request. Callers pass the
+ * Clerk SDK's `getToken` (never a pre-fetched string) so tokens are never cached
+ * and auto-refresh after idle. `getToken({ skipCache: true })` forces a refresh.
+ */
+export type TokenGetter = (opts?: { skipCache?: boolean; template?: string }) => Promise<string | null>;
+
+/** Thrown when there is no valid session even after a refresh — prompt re-auth. */
+export class ApiAuthError extends Error {
+  constructor(message = 'Your session has expired — please sign in again.') {
+    super(message);
+    this.name = 'ApiAuthError';
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Shared request helpers. The caller (a screen) always passes the Clerk token;
-// every response is validated against the matching shared zod schema.
+// Shared request core. Fresh token per request; on a 401, refresh the token
+// (skipCache) and retry EXACTLY ONCE before surfacing ApiAuthError.
 // ---------------------------------------------------------------------------
-async function authedGet<T>(token: string, path: string, schema: ZodSchema<T>): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+async function requestWithRetry(getToken: TokenGetter, path: string, init: RequestInit): Promise<Response> {
+  const doFetch = async (skipCache: boolean): Promise<Response> => {
+    const token = await getToken(skipCache ? { skipCache: true } : undefined);
+    if (!token) throw new ApiAuthError();
+    return fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${token}`, ...(init.headers ?? {}) },
+    });
+  };
+  let res = await doFetch(false);
+  if (res.status === 401) res = await doFetch(true); // one silent refresh + retry
+  if (res.status === 401) throw new ApiAuthError();
+  return res;
+}
+
+async function authedGet<T>(getToken: TokenGetter, path: string, schema: ZodSchema<T>): Promise<T> {
+  const res = await requestWithRetry(getToken, path, {});
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
   return schema.parse(await res.json());
 }
 
 async function authedSend<T>(
-  token: string,
+  getToken: TokenGetter,
   path: string,
   method: 'POST' | 'PATCH' | 'DELETE',
   body: unknown,
   schema: ZodSchema<T>,
 ): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await requestWithRetry(getToken, path, {
     method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
@@ -105,10 +133,10 @@ async function authedSend<T>(
 }
 
 /** DELETE that tolerates a 204/empty body (no response parsing). */
-async function authedDelete(token: string, path: string, body?: unknown): Promise<void> {
-  const res = await fetch(`${API_URL}${path}`, {
+async function authedDelete(getToken: TokenGetter, path: string, body?: unknown): Promise<void> {
+  const res = await requestWithRetry(getToken, path, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
@@ -132,84 +160,84 @@ function listQuery(params: ListParams): string {
 // ---------------------------------------------------------------------------
 // Me (unchanged).
 // ---------------------------------------------------------------------------
-export function fetchMe(token: string): Promise<MeResponse> {
-  return authedGet(token, API_ROUTES.me, MeResponseSchema);
+export function fetchMe(getToken: TokenGetter): Promise<MeResponse> {
+  return authedGet(getToken, API_ROUTES.me, MeResponseSchema);
 }
 
 // ---------------------------------------------------------------------------
 // Contacts.
 // ---------------------------------------------------------------------------
-export function listContacts(token: string, params: ListParams = {}): Promise<ContactListResponse> {
-  return authedGet(token, `${API_ROUTES.contacts}${listQuery(params)}`, ContactListResponseSchema);
+export function listContacts(getToken: TokenGetter, params: ListParams = {}): Promise<ContactListResponse> {
+  return authedGet(getToken, `${API_ROUTES.contacts}${listQuery(params)}`, ContactListResponseSchema);
 }
-export function getContact(token: string, id: string): Promise<Contact> {
-  return authedGet(token, `${API_ROUTES.contacts}/${id}`, ContactSchema);
+export function getContact(getToken: TokenGetter, id: string): Promise<Contact> {
+  return authedGet(getToken, `${API_ROUTES.contacts}/${id}`, ContactSchema);
 }
-export function createContact(token: string, body: CreateContactInput): Promise<Contact> {
-  return authedSend(token, API_ROUTES.contacts, 'POST', body, ContactSchema);
+export function createContact(getToken: TokenGetter, body: CreateContactInput): Promise<Contact> {
+  return authedSend(getToken, API_ROUTES.contacts, 'POST', body, ContactSchema);
 }
 
 // ---------------------------------------------------------------------------
 // Companies.
 // ---------------------------------------------------------------------------
-export function listCompanies(token: string, params: ListParams = {}): Promise<CompanyListResponse> {
-  return authedGet(token, `${API_ROUTES.companies}${listQuery(params)}`, CompanyListResponseSchema);
+export function listCompanies(getToken: TokenGetter, params: ListParams = {}): Promise<CompanyListResponse> {
+  return authedGet(getToken, `${API_ROUTES.companies}${listQuery(params)}`, CompanyListResponseSchema);
 }
-export function getCompany(token: string, id: string): Promise<Company> {
-  return authedGet(token, `${API_ROUTES.companies}/${id}`, CompanySchema);
+export function getCompany(getToken: TokenGetter, id: string): Promise<Company> {
+  return authedGet(getToken, `${API_ROUTES.companies}/${id}`, CompanySchema);
 }
 
 // ---------------------------------------------------------------------------
 // Leads.
 // ---------------------------------------------------------------------------
-export function listLeads(token: string, params: ListParams = {}): Promise<LeadListResponse> {
-  return authedGet(token, `${API_ROUTES.leads}${listQuery(params)}`, LeadListResponseSchema);
+export function listLeads(getToken: TokenGetter, params: ListParams = {}): Promise<LeadListResponse> {
+  return authedGet(getToken, `${API_ROUTES.leads}${listQuery(params)}`, LeadListResponseSchema);
 }
-export function getLead(token: string, id: string): Promise<Lead> {
-  return authedGet(token, `${API_ROUTES.leads}/${id}`, LeadSchema);
+export function getLead(getToken: TokenGetter, id: string): Promise<Lead> {
+  return authedGet(getToken, `${API_ROUTES.leads}/${id}`, LeadSchema);
 }
-export function createLead(token: string, body: CreateLeadInput): Promise<Lead> {
-  return authedSend(token, API_ROUTES.leads, 'POST', body, LeadSchema);
+export function createLead(getToken: TokenGetter, body: CreateLeadInput): Promise<Lead> {
+  return authedSend(getToken, API_ROUTES.leads, 'POST', body, LeadSchema);
 }
-export function updateLeadStatus(token: string, id: string, status: LeadStatus): Promise<Lead> {
-  return authedSend(token, `${API_ROUTES.leads}/${id}/status`, 'PATCH', { status }, LeadSchema);
+export function updateLeadStatus(getToken: TokenGetter, id: string, status: LeadStatus): Promise<Lead> {
+  return authedSend(getToken, `${API_ROUTES.leads}/${id}/status`, 'PATCH', { status }, LeadSchema);
 }
 export function convertLead(
-  token: string,
+  getToken: TokenGetter,
   id: string,
   body: ConvertLeadInput = {},
 ): Promise<ConvertLeadResponse> {
-  return authedSend(token, `${API_ROUTES.leads}/${id}/convert`, 'POST', body, ConvertLeadResponseSchema);
+  return authedSend(getToken, `${API_ROUTES.leads}/${id}/convert`, 'POST', body, ConvertLeadResponseSchema);
 }
 
 // ---------------------------------------------------------------------------
 // Notes + Activity (entity-scoped feeds).
 // ---------------------------------------------------------------------------
 export function listNotes(
-  token: string,
+  getToken: TokenGetter,
   entityType: string,
   entityId: string,
   cursor?: string,
 ): Promise<NoteListResponse> {
   const q = new URLSearchParams({ entityType, entityId });
   if (cursor) q.set('cursor', cursor);
-  return authedGet(token, `${API_ROUTES.notes}?${q.toString()}`, NoteListResponseSchema);
+  return authedGet(getToken, `${API_ROUTES.notes}?${q.toString()}`, NoteListResponseSchema);
 }
 export function createNote(
-  token: string,
+  getToken: TokenGetter,
   body: { entityType: string; entityId: string; body: string },
 ): Promise<Note> {
-  return authedSend(token, API_ROUTES.notes, 'POST', body, NoteSchema);
+  return authedSend(getToken, API_ROUTES.notes, 'POST', body, NoteSchema);
 }
 export function listActivity(
-  token: string,
+  getToken: TokenGetter,
   entityType: string,
   entityId: string,
   cursor?: string,
 ): Promise<ActivityListResponse> {
   const q = new URLSearchParams({ entityType, entityId });
   if (cursor) q.set('cursor', cursor);
-  return authedGet(token, `${API_ROUTES.activity}?${q.toString()}`, ActivityListResponseSchema);
+  return authedGet(getToken, `${API_ROUTES.activity}?${q.toString()}`, ActivityListResponseSchema);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,33 +263,33 @@ function dealQuery(params: DealListParams): string {
   return s ? `?${s}` : '';
 }
 
-export function listPipelines(token: string): Promise<PipelineListResponse> {
-  return authedGet(token, API_ROUTES.pipelines, PipelineListResponseSchema);
+export function listPipelines(getToken: TokenGetter): Promise<PipelineListResponse> {
+  return authedGet(getToken, API_ROUTES.pipelines, PipelineListResponseSchema);
 }
-export function getPipeline(token: string, id: string): Promise<Pipeline> {
-  return authedGet(token, `${API_ROUTES.pipelines}/${id}`, PipelineSchema);
+export function getPipeline(getToken: TokenGetter, id: string): Promise<Pipeline> {
+  return authedGet(getToken, `${API_ROUTES.pipelines}/${id}`, PipelineSchema);
 }
-export function getBoard(token: string, pipelineId: string): Promise<BoardResponse> {
-  return authedGet(token, `${API_ROUTES.pipelines}/${pipelineId}/board`, BoardResponseSchema);
+export function getBoard(getToken: TokenGetter, pipelineId: string): Promise<BoardResponse> {
+  return authedGet(getToken, `${API_ROUTES.pipelines}/${pipelineId}/board`, BoardResponseSchema);
 }
 
-export function listDeals(token: string, params: DealListParams = {}): Promise<DealListResponse> {
-  return authedGet(token, `${API_ROUTES.deals}${dealQuery(params)}`, DealListResponseSchema);
+export function listDeals(getToken: TokenGetter, params: DealListParams = {}): Promise<DealListResponse> {
+  return authedGet(getToken, `${API_ROUTES.deals}${dealQuery(params)}`, DealListResponseSchema);
 }
-export function getDeal(token: string, id: string): Promise<Deal> {
-  return authedGet(token, `${API_ROUTES.deals}/${id}`, DealSchema);
+export function getDeal(getToken: TokenGetter, id: string): Promise<Deal> {
+  return authedGet(getToken, `${API_ROUTES.deals}/${id}`, DealSchema);
 }
-export function createDeal(token: string, body: CreateDealInput): Promise<Deal> {
-  return authedSend(token, API_ROUTES.deals, 'POST', body, DealSchema);
+export function createDeal(getToken: TokenGetter, body: CreateDealInput): Promise<Deal> {
+  return authedSend(getToken, API_ROUTES.deals, 'POST', body, DealSchema);
 }
-export function updateDeal(token: string, id: string, body: UpdateDealInput): Promise<Deal> {
-  return authedSend(token, `${API_ROUTES.deals}/${id}`, 'PATCH', body, DealSchema);
+export function updateDeal(getToken: TokenGetter, id: string, body: UpdateDealInput): Promise<Deal> {
+  return authedSend(getToken, `${API_ROUTES.deals}/${id}`, 'PATCH', body, DealSchema);
 }
-export function moveDeal(token: string, id: string, body: MoveDealInput): Promise<Deal> {
-  return authedSend(token, `${API_ROUTES.deals}/${id}/move`, 'POST', body, DealSchema);
+export function moveDeal(getToken: TokenGetter, id: string, body: MoveDealInput): Promise<Deal> {
+  return authedSend(getToken, `${API_ROUTES.deals}/${id}/move`, 'POST', body, DealSchema);
 }
-export function reopenDeal(token: string, id: string, body: ReopenDealInput = {}): Promise<Deal> {
-  return authedSend(token, `${API_ROUTES.deals}/${id}/reopen`, 'POST', body, DealSchema);
+export function reopenDeal(getToken: TokenGetter, id: string, body: ReopenDealInput = {}): Promise<Deal> {
+  return authedSend(getToken, `${API_ROUTES.deals}/${id}/reopen`, 'POST', body, DealSchema);
 }
 
 /** Format integer minor units as major currency (assumes 2 decimal places). */
@@ -303,41 +331,41 @@ function taskQuery(params: TaskListParams): string {
   return s ? `?${s}` : '';
 }
 
-export function listTasks(token: string, params: TaskListParams = {}): Promise<TaskListResponse> {
-  return authedGet(token, `${API_ROUTES.tasks}${taskQuery(params)}`, TaskListResponseSchema);
+export function listTasks(getToken: TokenGetter, params: TaskListParams = {}): Promise<TaskListResponse> {
+  return authedGet(getToken, `${API_ROUTES.tasks}${taskQuery(params)}`, TaskListResponseSchema);
 }
-export function getTask(token: string, id: string): Promise<Task> {
-  return authedGet(token, `${API_ROUTES.tasks}/${id}`, TaskSchema);
+export function getTask(getToken: TokenGetter, id: string): Promise<Task> {
+  return authedGet(getToken, `${API_ROUTES.tasks}/${id}`, TaskSchema);
 }
 export function getAgenda(
-  token: string,
+  getToken: TokenGetter,
   params: { assigneeId?: string; type?: string } = {},
 ): Promise<AgendaResponse> {
   const q = new URLSearchParams();
   if (params.assigneeId) q.set('assigneeId', params.assigneeId);
   if (params.type) q.set('type', params.type);
   const s = q.toString();
-  return authedGet(token, `${API_ROUTES.agenda}${s ? `?${s}` : ''}`, AgendaResponseSchema);
+  return authedGet(getToken, `${API_ROUTES.agenda}${s ? `?${s}` : ''}`, AgendaResponseSchema);
 }
-export function createTask(token: string, body: CreateTaskInput): Promise<Task> {
-  return authedSend(token, API_ROUTES.tasks, 'POST', body, TaskSchema);
+export function createTask(getToken: TokenGetter, body: CreateTaskInput): Promise<Task> {
+  return authedSend(getToken, API_ROUTES.tasks, 'POST', body, TaskSchema);
 }
-export function updateTask(token: string, id: string, body: UpdateTaskInput): Promise<Task> {
-  return authedSend(token, `${API_ROUTES.tasks}/${id}`, 'PATCH', body, TaskSchema);
+export function updateTask(getToken: TokenGetter, id: string, body: UpdateTaskInput): Promise<Task> {
+  return authedSend(getToken, `${API_ROUTES.tasks}/${id}`, 'PATCH', body, TaskSchema);
 }
-export function completeTask(token: string, id: string, body: CompleteTaskInput = {}): Promise<Task> {
-  return authedSend(token, `${API_ROUTES.tasks}/${id}/complete`, 'POST', body, TaskSchema);
+export function completeTask(getToken: TokenGetter, id: string, body: CompleteTaskInput = {}): Promise<Task> {
+  return authedSend(getToken, `${API_ROUTES.tasks}/${id}/complete`, 'POST', body, TaskSchema);
 }
-export function snoozeTask(token: string, id: string, body: SnoozeTaskInput): Promise<Task> {
-  return authedSend(token, `${API_ROUTES.tasks}/${id}/snooze`, 'POST', body, TaskSchema);
+export function snoozeTask(getToken: TokenGetter, id: string, body: SnoozeTaskInput): Promise<Task> {
+  return authedSend(getToken, `${API_ROUTES.tasks}/${id}/snooze`, 'POST', body, TaskSchema);
 }
-export function reassignTask(token: string, id: string, body: ReassignTaskInput): Promise<Task> {
-  return authedSend(token, `${API_ROUTES.tasks}/${id}/reassign`, 'POST', body, TaskSchema);
+export function reassignTask(getToken: TokenGetter, id: string, body: ReassignTaskInput): Promise<Task> {
+  return authedSend(getToken, `${API_ROUTES.tasks}/${id}/reassign`, 'POST', body, TaskSchema);
 }
 
 // --- Notifications ----------------------------------------------------------
 export function listNotifications(
-  token: string,
+  getToken: TokenGetter,
   params: { cursor?: string; limit?: number; unread?: 'true' } = {},
 ): Promise<NotificationListResponse> {
   const q = new URLSearchParams();
@@ -345,34 +373,34 @@ export function listNotifications(
   if (params.limit) q.set('limit', String(params.limit));
   if (params.unread) q.set('unread', params.unread);
   const s = q.toString();
-  return authedGet(token, `${API_ROUTES.notifications}${s ? `?${s}` : ''}`, NotificationListResponseSchema);
+  return authedGet(getToken, `${API_ROUTES.notifications}${s ? `?${s}` : ''}`, NotificationListResponseSchema);
 }
-export function getUnreadCount(token: string): Promise<UnreadCountResponse> {
-  return authedGet(token, `${API_ROUTES.notifications}/unread-count`, UnreadCountResponseSchema);
+export function getUnreadCount(getToken: TokenGetter): Promise<UnreadCountResponse> {
+  return authedGet(getToken, `${API_ROUTES.notifications}/unread-count`, UnreadCountResponseSchema);
 }
-export function markNotificationRead(token: string, id: string): Promise<Notification> {
-  return authedSend(token, `${API_ROUTES.notifications}/${id}/read`, 'POST', {}, NotificationSchema);
+export function markNotificationRead(getToken: TokenGetter, id: string): Promise<Notification> {
+  return authedSend(getToken, `${API_ROUTES.notifications}/${id}/read`, 'POST', {}, NotificationSchema);
 }
-export async function markAllNotificationsRead(token: string): Promise<void> {
-  const res = await fetch(`${API_URL}${API_ROUTES.notifications}/read-all`, {
+export async function markAllNotificationsRead(getToken: TokenGetter): Promise<void> {
+  const res = await requestWithRetry(getToken, `${API_ROUTES.notifications}/read-all`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: '{}',
   });
   if (!res.ok) throw new Error(`POST read-all failed: ${res.status}`);
 }
 
 // --- Push tokens ------------------------------------------------------------
-export function registerPushToken(token: string, body: RegisterPushTokenInput): Promise<PushToken> {
-  return authedSend(token, API_ROUTES.pushTokens, 'POST', body, PushTokenSchema);
+export function registerPushToken(getToken: TokenGetter, body: RegisterPushTokenInput): Promise<PushToken> {
+  return authedSend(getToken, API_ROUTES.pushTokens, 'POST', body, PushTokenSchema);
 }
-export function unregisterPushToken(token: string, deviceToken: string): Promise<void> {
-  return authedDelete(token, API_ROUTES.pushTokens, { token: deviceToken });
+export function unregisterPushToken(getToken: TokenGetter, deviceToken: string): Promise<void> {
+  return authedDelete(getToken, API_ROUTES.pushTokens, { token: deviceToken });
 }
 
 // --- Users (assignee directory) --------------------------------------------
-export function listUsers(token: string): Promise<OrgUserListResponse> {
-  return authedGet(token, API_ROUTES.users, OrgUserListResponseSchema);
+export function listUsers(getToken: TokenGetter): Promise<OrgUserListResponse> {
+  return authedGet(getToken, API_ROUTES.users, OrgUserListResponseSchema);
 }
 
 // --- Dashboard (M4) ---------------------------------------------------------
@@ -383,10 +411,10 @@ export interface SalesTilesParams {
 }
 
 /** Personal sales tiles for the mobile glance (always own-scoped). */
-export function getSalesTiles(token: string, params: SalesTilesParams = {}): Promise<SalesTiles> {
+export function getSalesTiles(getToken: TokenGetter, params: SalesTilesParams = {}): Promise<SalesTiles> {
   const q = new URLSearchParams();
   if (params.period) q.set('period', params.period);
   if (params.scope) q.set('scope', params.scope);
   const s = q.toString();
-  return authedGet(token, `${API_ROUTES.dashboard}/sales${s ? `?${s}` : ''}`, SalesTilesSchema);
+  return authedGet(getToken, `${API_ROUTES.dashboard}/sales${s ? `?${s}` : ''}`, SalesTilesSchema);
 }

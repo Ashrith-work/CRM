@@ -61,8 +61,6 @@ export function QuickAddTask({
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
       const when = dueIso(due);
       const body: CreateTaskInput = {
         type,
@@ -73,7 +71,7 @@ export function QuickAddTask({
         ...(when ? { reminders: [{ minutesBefore: 60 }] } : {}),
         ...(relatedType && relatedId ? { relatedType, relatedId } : {}),
       };
-      await createTask(token, body);
+      await createTask(getToken, body);
       pop();
     } catch (err) {
       setError((err as Error).message);

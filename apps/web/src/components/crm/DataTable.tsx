@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Button, ErrorPanel, Spinner } from './ui';
-import type { ListParams } from '@/lib/api';
+import type { ListParams, TokenGetter } from '@/lib/api';
 
 export interface Column<T> {
   key: string;
@@ -28,7 +28,7 @@ interface Page<T> {
 /**
  * Reusable server-paginated table: debounced search, optional filters,
  * click-to-sort headers, cursor "Load more", and row navigation. Generic over
- * the row type; the caller supplies a `fetchPage(token, params)` function.
+ * the row type; the caller supplies a `fetchPage(getToken, params)` function.
  */
 export function DataTable<T extends { id: string }>({
   columns,
@@ -41,7 +41,7 @@ export function DataTable<T extends { id: string }>({
   reloadKey = '',
 }: {
   columns: Column<T>[];
-  fetchPage: (token: string, params: ListParams) => Promise<Page<T>>;
+  fetchPage: (getToken: TokenGetter, params: ListParams) => Promise<Page<T>>;
   onRowClick?: (row: T) => void;
   filters?: DataTableFilter[];
   searchPlaceholder?: string;
@@ -62,9 +62,7 @@ export function DataTable<T extends { id: string }>({
     async (append: boolean) => {
       if (!append) setStatus('loading');
       try {
-        const token = await getToken();
-        if (!token) throw new Error('No session token available');
-        const page = await fetchPage(token, {
+        const page = await fetchPage(getToken, {
           search: search || undefined,
           sort,
           order,

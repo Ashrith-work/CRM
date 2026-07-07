@@ -41,9 +41,7 @@ export function NotesSection({
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await createNote(token, { entityType, entityId, body: body.trim() });
+      await createNote(getToken, { entityType, entityId, body: body.trim() });
       setBody('');
       await reload();
       onChanged();

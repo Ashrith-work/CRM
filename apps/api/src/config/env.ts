@@ -15,6 +15,9 @@ const envSchema = z.object({
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_JWT_KEY: z.string().optional(),
   CLERK_AUTHORIZED_PARTIES: z.string().optional(),
+  /** Clock-skew tolerance (ms) for JWT exp/nbf checks, so minor drift between
+   * the client, Clerk, and this server does not reject otherwise-valid tokens. */
+  CLERK_CLOCK_SKEW_MS: z.coerce.number().int().min(0).default(5_000),
 
   // Milestone 3 — reminders + notifications.
   /** How often the reminder sweep runs (ms). */

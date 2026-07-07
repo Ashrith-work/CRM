@@ -19,9 +19,7 @@ export default function EditContactPage() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      const [c, cs] = await Promise.all([getContact(token, id), listCompanies(token, { limit: 100 })]);
+      const [c, cs] = await Promise.all([getContact(getToken, id), listCompanies(getToken, { limit: 100 })]);
       setContact(c);
       setCompanies(cs.data);
     } catch (err) {
@@ -72,8 +70,6 @@ export default function EditContactPage() {
           submitLabel="Save changes"
           onCancel={() => router.push(`/dashboard/contacts/${id}`)}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: UpdateContactInput = {
               firstName: core.firstName,
               lastName: core.lastName,
@@ -84,7 +80,7 @@ export default function EditContactPage() {
               customFields,
               tagIds,
             };
-            await updateContact(token, id, body);
+            await updateContact(getToken, id, body);
             router.push(`/dashboard/contacts/${id}`);
           }}
         />

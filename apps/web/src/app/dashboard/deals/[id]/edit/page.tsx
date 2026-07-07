@@ -20,12 +20,10 @@ export default function EditDealPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
 
   const load = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
     const [d, c, co] = await Promise.all([
-      getDeal(token, id),
-      listContacts(token, { limit: 100 }),
-      listCompanies(token, { limit: 100 }),
+      getDeal(getToken, id),
+      listContacts(getToken, { limit: 100 }),
+      listCompanies(getToken, { limit: 100 }),
     ]);
     setDeal(d);
     setContacts(c.data);
@@ -79,8 +77,6 @@ export default function EditDealPage() {
           submitLabel="Save changes"
           onCancel={() => router.push(`/dashboard/deals/${id}`)}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: UpdateDealInput = {
               name: core.name,
               amountMinor: core.amount !== undefined ? toMinor(core.amount) : undefined,
@@ -91,7 +87,7 @@ export default function EditDealPage() {
               customFields,
               tagIds,
             };
-            await updateDeal(token, id, body);
+            await updateDeal(getToken, id, body);
             router.push(`/dashboard/deals/${id}`);
           }}
         />
