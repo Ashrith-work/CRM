@@ -32,6 +32,11 @@ export const ACTIVITY_EVENT_TYPES = [
   'WON',
   'LOST',
   'REOPENED',
+  // Milestone 3 — activity tasks.
+  'TASK_CREATED',
+  'TASK_UPDATED',
+  'TASK_COMPLETED',
+  'TASK_CANCELLED',
 ] as const;
 export const ActivityEventTypeSchema = z.enum(ACTIVITY_EVENT_TYPES);
 export type ActivityEventType = z.infer<typeof ActivityEventTypeSchema>;

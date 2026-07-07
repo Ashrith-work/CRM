@@ -40,10 +40,38 @@ import {
   type PipelineListResponse,
   type ReopenDealInput,
   type UpdateDealInput,
+  // Milestone 3 — tasks, reminders, notifications, push, users.
+  TaskSchema,
+  TaskListResponseSchema,
+  AgendaResponseSchema,
+  NotificationSchema,
+  NotificationListResponseSchema,
+  UnreadCountResponseSchema,
+  PushTokenSchema,
+  OrgUserListResponseSchema,
+  type Task,
+  type TaskListResponse,
+  type AgendaResponse,
+  type CreateTaskInput,
+  type UpdateTaskInput,
+  type CompleteTaskInput,
+  type SnoozeTaskInput,
+  type ReassignTaskInput,
+  type Notification,
+  type NotificationListResponse,
+  type UnreadCountResponse,
+  type PushToken,
+  type RegisterPushTokenInput,
+  type OrgUserListResponse,
 } from '@crm/types';
 import type { ZodSchema } from 'zod';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+/** Base API URL (used by the Socket.io client + push registration). */
+export function apiBaseUrl(): string {
+  return API_URL;
+}
 
 // ---------------------------------------------------------------------------
 // Shared request helpers. The caller (a screen) always passes the Clerk token;
@@ -71,6 +99,16 @@ async function authedSend<T>(
   });
   if (!res.ok) throw new Error(`${method} ${path} failed: ${res.status}`);
   return schema.parse(await res.json());
+}
+
+/** DELETE that tolerates a 204/empty body (no response parsing). */
+async function authedDelete(token: string, path: string, body?: unknown): Promise<void> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
 }
 
 export interface ListParams {
@@ -233,4 +271,103 @@ export function formatMoney(amountMinor: number, currency: string): string {
 export function parseAmountToMinor(text: string): number {
   const n = Number(text.replace(/,/g, ''));
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Milestone 3 — tasks, agenda, reminders (server-side), notifications, push.
+// ---------------------------------------------------------------------------
+export interface TaskListParams {
+  search?: string;
+  cursor?: string;
+  limit?: number;
+  type?: string;
+  status?: string;
+  priority?: string;
+  bucket?: 'overdue' | 'today' | 'upcoming' | 'all';
+  assigneeId?: string;
+  relatedType?: string;
+  relatedId?: string;
+  from?: string;
+  to?: string;
+}
+
+function taskQuery(params: TaskListParams): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export function listTasks(token: string, params: TaskListParams = {}): Promise<TaskListResponse> {
+  return authedGet(token, `${API_ROUTES.tasks}${taskQuery(params)}`, TaskListResponseSchema);
+}
+export function getTask(token: string, id: string): Promise<Task> {
+  return authedGet(token, `${API_ROUTES.tasks}/${id}`, TaskSchema);
+}
+export function getAgenda(
+  token: string,
+  params: { assigneeId?: string; type?: string } = {},
+): Promise<AgendaResponse> {
+  const q = new URLSearchParams();
+  if (params.assigneeId) q.set('assigneeId', params.assigneeId);
+  if (params.type) q.set('type', params.type);
+  const s = q.toString();
+  return authedGet(token, `${API_ROUTES.agenda}${s ? `?${s}` : ''}`, AgendaResponseSchema);
+}
+export function createTask(token: string, body: CreateTaskInput): Promise<Task> {
+  return authedSend(token, API_ROUTES.tasks, 'POST', body, TaskSchema);
+}
+export function updateTask(token: string, id: string, body: UpdateTaskInput): Promise<Task> {
+  return authedSend(token, `${API_ROUTES.tasks}/${id}`, 'PATCH', body, TaskSchema);
+}
+export function completeTask(token: string, id: string, body: CompleteTaskInput = {}): Promise<Task> {
+  return authedSend(token, `${API_ROUTES.tasks}/${id}/complete`, 'POST', body, TaskSchema);
+}
+export function snoozeTask(token: string, id: string, body: SnoozeTaskInput): Promise<Task> {
+  return authedSend(token, `${API_ROUTES.tasks}/${id}/snooze`, 'POST', body, TaskSchema);
+}
+export function reassignTask(token: string, id: string, body: ReassignTaskInput): Promise<Task> {
+  return authedSend(token, `${API_ROUTES.tasks}/${id}/reassign`, 'POST', body, TaskSchema);
+}
+
+// --- Notifications ----------------------------------------------------------
+export function listNotifications(
+  token: string,
+  params: { cursor?: string; limit?: number; unread?: 'true' } = {},
+): Promise<NotificationListResponse> {
+  const q = new URLSearchParams();
+  if (params.cursor) q.set('cursor', params.cursor);
+  if (params.limit) q.set('limit', String(params.limit));
+  if (params.unread) q.set('unread', params.unread);
+  const s = q.toString();
+  return authedGet(token, `${API_ROUTES.notifications}${s ? `?${s}` : ''}`, NotificationListResponseSchema);
+}
+export function getUnreadCount(token: string): Promise<UnreadCountResponse> {
+  return authedGet(token, `${API_ROUTES.notifications}/unread-count`, UnreadCountResponseSchema);
+}
+export function markNotificationRead(token: string, id: string): Promise<Notification> {
+  return authedSend(token, `${API_ROUTES.notifications}/${id}/read`, 'POST', {}, NotificationSchema);
+}
+export async function markAllNotificationsRead(token: string): Promise<void> {
+  const res = await fetch(`${API_URL}${API_ROUTES.notifications}/read-all`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`POST read-all failed: ${res.status}`);
+}
+
+// --- Push tokens ------------------------------------------------------------
+export function registerPushToken(token: string, body: RegisterPushTokenInput): Promise<PushToken> {
+  return authedSend(token, API_ROUTES.pushTokens, 'POST', body, PushTokenSchema);
+}
+export function unregisterPushToken(token: string, deviceToken: string): Promise<void> {
+  return authedDelete(token, API_ROUTES.pushTokens, { token: deviceToken });
+}
+
+// --- Users (assignee directory) --------------------------------------------
+export function listUsers(token: string): Promise<OrgUserListResponse> {
+  return authedGet(token, API_ROUTES.users, OrgUserListResponseSchema);
 }

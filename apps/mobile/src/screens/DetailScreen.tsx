@@ -9,6 +9,7 @@ import { getCompany, getContact, getLead, convertLead, updateLeadStatus } from '
 import { ScreenHeader } from './ScreenHeader';
 import { NotesSection, Timeline } from './EntityFeed';
 import { STATUS_COLOR } from './EntityList';
+import { FollowUpsCard } from './FollowUpsCard';
 
 function useRefresh(): [number, () => void] {
   const [n, setN] = useState(0);
@@ -83,6 +84,7 @@ function ContactDetail({ id }: { id: string }): React.JSX.Element {
       </Card>
       <Tags tags={c.tags} />
       <CustomFields values={c.customFields} />
+      <FollowUpsCard relatedType="CONTACT" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="CONTACT" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="CONTACT" entityId={id} refreshToken={refreshToken} />
     </Frame>
@@ -108,6 +110,7 @@ function CompanyDetail({ id }: { id: string }): React.JSX.Element {
       </Card>
       <Tags tags={c.tags} />
       <CustomFields values={c.customFields} />
+      <FollowUpsCard relatedType="COMPANY" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="COMPANY" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="COMPANY" entityId={id} refreshToken={refreshToken} />
     </Frame>
@@ -191,6 +194,7 @@ function LeadDetail({ id }: { id: string }): React.JSX.Element {
       {actionError ? <ErrorBox message={actionError} /> : null}
       <Tags tags={l.tags} />
       <CustomFields values={l.customFields} />
+      <FollowUpsCard relatedType="LEAD" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="LEAD" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="LEAD" entityId={id} refreshToken={refreshToken} />
     </Frame>

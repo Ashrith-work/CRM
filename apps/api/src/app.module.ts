@@ -18,6 +18,9 @@ import { LeadsModule } from './leads/leads.module';
 import { StagesModule } from './stages/stages.module';
 import { PipelinesModule } from './pipelines/pipelines.module';
 import { DealsModule } from './deals/deals.module';
+import { PushTokensModule } from './push-tokens/push-tokens.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { TasksModule } from './tasks/tasks.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -48,6 +51,11 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     StagesModule,
     PipelinesModule,
     DealsModule,
+    // Milestone 3 — activity, reminders, notifications. PushTokens/Notifications
+    // register before Tasks (the reminder send worker depends on them).
+    PushTokensModule,
+    NotificationsModule,
+    TasksModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

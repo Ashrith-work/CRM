@@ -15,6 +15,18 @@ const envSchema = z.object({
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_JWT_KEY: z.string().optional(),
   CLERK_AUTHORIZED_PARTIES: z.string().optional(),
+
+  // Milestone 3 — reminders + notifications.
+  /** How often the reminder sweep runs (ms). */
+  REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().int().min(1000).default(60_000),
+  /** Max concurrent send jobs (throttles a storm of simultaneous reminders). */
+  REMINDER_SEND_CONCURRENCY: z.coerce.number().int().min(1).default(10),
+  /** From address for reminder/notification emails. */
+  EMAIL_FROM: z.string().default('CRM <no-reply@crm.local>'),
+  /** If set, emails are sent via the Resend HTTP API; otherwise logged. */
+  RESEND_API_KEY: z.string().optional(),
+  /** Optional Expo access token for authenticated push (recommended in prod). */
+  EXPO_ACCESS_TOKEN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

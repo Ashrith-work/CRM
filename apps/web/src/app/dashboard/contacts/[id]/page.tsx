@@ -12,6 +12,7 @@ import { TagList } from '@/components/crm/TagPicker';
 import { NoteList } from '@/components/crm/NoteList';
 import { Timeline } from '@/components/crm/Timeline';
 import { DealsSection } from '@/components/crm/DealsSection';
+import { TasksSection } from '@/components/crm/TasksSection';
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -106,6 +107,8 @@ export default function ContactDetailPage() {
         </Card>
 
         <DealsSection contactId={id} />
+
+        <TasksSection relatedType="CONTACT" relatedId={id} relatedLabel={`${c.firstName} ${c.lastName}`} />
 
         <Card title="Notes">
           <NoteList entityType="CONTACT" entityId={id} onAdded={() => setTimelineKey((k) => k + 1)} />

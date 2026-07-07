@@ -9,6 +9,7 @@ import { formatMoney, getDeal, getPipeline, moveDeal, reopenDeal } from '../api'
 import { ScreenHeader } from './ScreenHeader';
 import { NotesSection, Timeline } from './EntityFeed';
 import { stageColor } from './PipelineScreen';
+import { FollowUpsCard } from './FollowUpsCard';
 
 const STATUS_COLOR: Record<Deal['status'], string> = { OPEN: colors.brand, WON: '#16a34a', LOST: '#dc2626' };
 
@@ -139,6 +140,7 @@ export function DealDetail({ id }: { id: string }): React.JSX.Element {
         </Card>
       ) : null}
 
+      <FollowUpsCard relatedType="DEAL" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="DEAL" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="DEAL" entityId={id} refreshToken={refreshToken} />
     </Frame>

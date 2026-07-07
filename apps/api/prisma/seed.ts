@@ -124,6 +124,7 @@ async function main() {
 
   await seedCrmSampleData(org.id, owner.id);
   await seedRevenueSampleData(org.id, owner.id);
+  await seedActivitySampleData(org.id, owner.id);
 
   console.log('Seed complete:');
   console.log(`  org:    ${org.name} (${org.slug}) id=${org.id}`);
@@ -333,6 +334,110 @@ async function seedRevenueSampleData(organizationId: string, ownerId: string): P
   }
 
   console.log(`  deals:  seeded "${pipeline.name}" with ${stageData.length} stages + ${deals.length} deals`);
+}
+
+/**
+ * Milestone 3 sample data: a mix of tasks/follow-ups/meetings/calls assigned to
+ * the owner, some linked to the sample contact/deal, each with a scheduled
+ * reminder, plus one in-app notification. Idempotent — skipped if tasks exist.
+ */
+async function seedActivitySampleData(organizationId: string, ownerId: string): Promise<void> {
+  const existing = await prisma.task.count({ where: { organizationId } });
+  if (existing > 0) {
+    console.log('  tasks:  sample tasks already present — skipped');
+    return;
+  }
+
+  const contact = await prisma.contact.findFirst({ where: { organizationId, deletedAt: null } });
+  const deal = await prisma.deal.findFirst({ where: { organizationId, deletedAt: null } });
+
+  const now = Date.now();
+  const hours = (h: number) => new Date(now + h * 3_600_000);
+
+  // An overdue follow-up (reminder already due — proves the sweep fires it).
+  const overdue = await prisma.task.create({
+    data: {
+      organizationId,
+      type: 'FOLLOW_UP',
+      title: 'Follow up on intro call',
+      description: 'Send the pricing one-pager and propose next steps.',
+      priority: 'HIGH',
+      dueAt: hours(-2),
+      assigneeId: ownerId,
+      createdById: ownerId,
+      relatedType: contact ? 'CONTACT' : null,
+      relatedId: contact?.id ?? null,
+    },
+  });
+  await prisma.reminder.create({
+    data: { organizationId, taskId: overdue.id, remindAt: hours(-2), channels: ['IN_APP', 'EMAIL', 'PUSH'] },
+  });
+
+  // An upcoming call linked to the deal, reminder 15 min before.
+  const call = await prisma.task.create({
+    data: {
+      organizationId,
+      type: 'CALL',
+      title: 'Pricing negotiation call',
+      priority: 'MEDIUM',
+      dueAt: hours(24),
+      assigneeId: ownerId,
+      createdById: ownerId,
+      relatedType: deal ? 'DEAL' : null,
+      relatedId: deal?.id ?? null,
+    },
+  });
+  await prisma.reminder.create({
+    data: {
+      organizationId,
+      taskId: call.id,
+      remindAt: new Date(hours(24).getTime() - 15 * 60_000),
+      channels: ['IN_APP', 'PUSH'],
+    },
+  });
+
+  // A meeting later this week with start/end + a location.
+  const meeting = await prisma.task.create({
+    data: {
+      organizationId,
+      type: 'MEETING',
+      title: 'Quarterly business review',
+      priority: 'MEDIUM',
+      startAt: hours(72),
+      endAt: hours(73),
+      location: 'Zoom',
+      meetingUrl: 'https://example.com/qbr',
+      assigneeId: ownerId,
+      createdById: ownerId,
+      relatedType: contact ? 'CONTACT' : null,
+      relatedId: contact?.id ?? null,
+    },
+  });
+  await prisma.reminder.create({
+    data: {
+      organizationId,
+      taskId: meeting.id,
+      remindAt: new Date(hours(72).getTime() - 60 * 60_000),
+      channels: ['IN_APP', 'EMAIL', 'PUSH'],
+    },
+  });
+
+  // A seeded unread in-app notification for the overdue follow-up.
+  await prisma.notification.create({
+    data: {
+      organizationId,
+      userId: ownerId,
+      type: 'REMINDER',
+      title: 'Reminder: Follow up on intro call',
+      body: 'This follow-up is overdue.',
+      relatedType: overdue.relatedType,
+      relatedId: overdue.relatedId,
+      taskId: overdue.id,
+      deliveredChannels: ['IN_APP'],
+    },
+  });
+
+  console.log('  tasks:  seeded 3 tasks (+reminders) and 1 notification');
 }
 
 main()

@@ -16,7 +16,13 @@ export type Screen =
   | { name: 'pipeline' }
   | { name: 'dealDetail'; id: string }
   | { name: 'dealEdit'; id: string }
-  | { name: 'quickAddDeal' };
+  | { name: 'quickAddDeal' }
+  // Milestone 3 — tasks, agenda, notifications.
+  | { name: 'taskList' }
+  | { name: 'taskDetail'; id: string }
+  | { name: 'quickAddTask'; relatedType?: EntityType; relatedId?: string }
+  | { name: 'agenda' }
+  | { name: 'notifications' };
 
 interface NavValue {
   current: Screen;

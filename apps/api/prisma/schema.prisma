@@ -43,6 +43,12 @@ model Organization {
   deals          Deal[]
   stageHistories StageHistory[]
 
+  // Milestone 3 — activity, reminders, notifications.
+  tasks         Task[]
+  reminders     Reminder[]
+  notifications Notification[]
+  pushTokens    PushToken[]
+
   @@index([slug])
 }
 
@@ -53,6 +59,8 @@ model User {
   email          String
   firstName      String?
   lastName       String?
+  // Milestone 3 — IANA timezone so "9am" reminders fire at 9am THEIR local time.
+  timezone       String   @default("UTC")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -203,6 +211,11 @@ enum ActivityEventType {
   WON
   LOST
   REOPENED
+  // Milestone 3 — activity tasks.
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_COMPLETED
+  TASK_CANCELLED
 }
 
 model Company {
@@ -474,4 +487,146 @@ model StageHistory {
   deal         Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, dealId, changedAt])
+}
+
+// ============================================================================
+// Milestone 3 — activity tasks, reminders, notifications, push tokens.
+// Invariant (unchanged): every table carries organizationId; all datetimes are
+// UTC. assigneeId / createdById / userId hold a User.id as soft scalar refs
+// (no FK) to keep User back-relations minimal, matching M1/M2.
+// ============================================================================
+
+enum TaskType {
+  TASK
+  FOLLOW_UP
+  MEETING
+  CALL
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ReminderStatus {
+  SCHEDULED
+  SENT
+  CANCELLED
+}
+
+enum NotificationType {
+  REMINDER
+  ASSIGNMENT
+  MENTION
+  SYSTEM
+}
+
+enum PushPlatform {
+  IOS
+  ANDROID
+}
+
+/** A unified activity item: a to-do, follow-up, meeting, or call, optionally
+ * linked to a CRM record via relatedType (EntityType) + relatedId. */
+model Task {
+  id             String       @id @default(cuid())
+  organizationId String
+  type           TaskType     @default(TASK)
+  title          String
+  description    String?
+  status         TaskStatus   @default(OPEN)
+  priority       TaskPriority @default(MEDIUM)
+  dueAt          DateTime?
+  startAt        DateTime? // meetings
+  endAt          DateTime? // meetings
+  location       String?
+  meetingUrl     String?
+  assigneeId     String
+  createdById    String
+  relatedType    EntityType?
+  relatedId      String?
+  completedAt    DateTime?
+  outcome        String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reminders    Reminder[]
+
+  @@index([organizationId, deletedAt])
+  @@index([organizationId, assigneeId, status, dueAt])
+  @@index([organizationId, relatedType, relatedId])
+  @@index([organizationId, startAt])
+}
+
+/** One row per scheduled reminder (append-only). The reminder engine marks rows
+ * SENT atomically and enqueues a send job keyed by the reminder id (idempotent). */
+model Reminder {
+  id             String         @id @default(cuid())
+  organizationId String
+  taskId         String
+  remindAt       DateTime
+  channels       String[] // IN_APP | EMAIL | PUSH
+  status         ReminderStatus @default(SCHEDULED)
+  sentAt         DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  task         Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // Hot path for the 60s sweep: due & still SCHEDULED.
+  @@index([status, remindAt])
+  @@index([organizationId, taskId])
+}
+
+/** The durable in-app notification record. Fanned out across channels; the
+ * in-app row always persists so an offline user sees it on next load. */
+model Notification {
+  id                String           @id @default(cuid())
+  organizationId    String
+  userId            String // recipient (User.id, soft ref)
+  type              NotificationType
+  title             String
+  body              String
+  relatedType       EntityType?
+  relatedId         String?
+  taskId            String? // deep-link to the source task, if any
+  readAt            DateTime?
+  deliveredChannels String[] // IN_APP | EMAIL | PUSH — each delivered exactly once
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  deletedAt         DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId, readAt])
+  @@index([organizationId, userId, createdAt])
+}
+
+/** An Expo push token for a user's device. UNIQUE(token); pruned when Expo
+ * reports DeviceNotRegistered. */
+model PushToken {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  token          String       @unique
+  platform       PushPlatform
+  lastSeenAt     DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, userId])
 }

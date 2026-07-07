@@ -11,6 +11,7 @@ import { CustomFieldView } from '@/components/crm/CustomFieldView';
 import { TagList } from '@/components/crm/TagPicker';
 import { NoteList } from '@/components/crm/NoteList';
 import { Timeline } from '@/components/crm/Timeline';
+import { TasksSection } from '@/components/crm/TasksSection';
 
 const STATUS_BADGE: Record<string, string> = {
   OPEN: 'bg-brand-50 text-brand-700',
@@ -229,6 +230,8 @@ export default function DealDetailPage() {
             </ol>
           )}
         </Card>
+
+        <TasksSection relatedType="DEAL" relatedId={id} relatedLabel={deal.name} />
 
         <Card title="Notes">
           <NoteList entityType="DEAL" entityId={id} onAdded={() => setTimelineKey((k) => k + 1)} />

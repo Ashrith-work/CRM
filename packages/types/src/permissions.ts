@@ -34,6 +34,11 @@ export const PERMISSIONS = {
   PIPELINE_MANAGE: 'pipeline:manage',
   DEAL_READ: 'deal:read',
   DEAL_MANAGE: 'deal:manage',
+
+  // Milestone 3 — activity tasks + reminders. Notifications/push tokens are
+  // per-user and gated by USER_READ (held by every role), not a dedicated key.
+  TASK_READ: 'task:read',
+  TASK_MANAGE: 'task:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -83,6 +88,8 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.PIPELINE_MANAGE,
     PERMISSIONS.DEAL_READ,
     PERMISSIONS.DEAL_MANAGE,
+    PERMISSIONS.TASK_READ,
+    PERMISSIONS.TASK_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -98,5 +105,8 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.ACTIVITY_READ,
     PERMISSIONS.PIPELINE_READ,
     PERMISSIONS.DEAL_READ,
+    // Reps manage their own activity tasks + follow-ups.
+    PERMISSIONS.TASK_READ,
+    PERMISSIONS.TASK_MANAGE,
   ],
 };

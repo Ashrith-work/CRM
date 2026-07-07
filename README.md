@@ -1,4 +1,4 @@
-# CRM — Milestones 0 (Foundation) + 1 (Core CRM) + 2 (Revenue)
+# CRM — Milestones 0 (Foundation) + 1 (Core CRM) + 2 (Revenue) + 3 (Activity)
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -15,13 +15,21 @@ clients never duplicate it.
 > screens + pipeline admin; mobile gets a stage-segmented pipeline view + deal
 > detail with a stage picker. Deals link to Contacts/Companies and emit into the
 > M1 activity timeline. Money is stored as **integer minor units** — never a float.
+> **Milestone 3:** the activity layer — unified **Tasks** (TASK/FOLLOW_UP/
+> MEETING/CALL) linked to any M1/M2 record, a **restart-safe reminder engine** on
+> BullMQ, and **multi-channel notifications** (in-app via Socket.io, email, and
+> Expo push) behind one `NotificationService`. Reminders respect each assignee's
+> timezone and fire exactly once. Web gets a tasks list, a calendar, a live
+> notification center, and follow-up sections on Contact/Deal pages; mobile
+> registers for push, shows a Today+overdue list and agenda, and does
+> mark-done / log-outcome / snooze / quick-add.
 
 ## Stack
 
 | Area      | Tech                                                              |
 | --------- | ---------------------------------------------------------------- |
 | Monorepo  | Turborepo + pnpm workspaces                                      |
-| Backend   | NestJS, REST under `/api/v1`, Prisma, PostgreSQL, Redis/BullMQ   |
+| Backend   | NestJS, REST under `/api/v1`, Prisma, PostgreSQL, Redis/BullMQ, Socket.io |
 | Auth      | Clerk (JWT verified in a Nest guard)                             |
 | Web       | Next.js (App Router) + React + Tailwind + TypeScript, PWA        |
 | Mobile    | Expo / React Native (TypeScript)                                 |
@@ -69,14 +77,16 @@ Get the keys from **Clerk Dashboard → API Keys**:
 
 ```bash
 docker compose up -d        # Postgres + Redis
-pnpm db:migrate             # apply migrations (M0 foundation + M1 crm core)
-pnpm db:seed                # org + team + roles + users + sample CRM data
+pnpm db:migrate             # apply migrations (M0 + M1 + M2 + M3 activity)
+pnpm db:seed                # org + team + roles + users + sample CRM/deal/task data
 ```
 
 The seed creates an `Acme` org, a `Core Team`, three system roles
 (`owner`/`admin`/`member`), an **owner** user, a read-only **member** user, and
 sample CRM data (companies, contacts, leads, tags, custom-field definitions, a
-note, and activity) so every screen has something to show.
+note, and activity), sample deals, and **sample tasks** (an overdue follow-up, an
+upcoming call, a meeting — each with a reminder) plus one unread notification, so
+every screen has something to show.
 
 **Perf seed.** To load contacts for the list P95 test:
 
@@ -166,13 +176,61 @@ and audit-logged. List endpoints are cursor-paginated and return
 | GET | `/api/v1/deals/:id/history` | `deal:read` | append-only stage progression + time-in-stage |
 | POST | `/api/v1/deals/:id/move` | `deal:manage` | `{ toStageId }` — 1 tx: stage + StageHistory + `STAGE_CHANGED`/`WON`/`LOST`; 409 if terminal |
 | POST | `/api/v1/deals/:id/reopen` | `deal:manage` | `{ toStageId? }` — WON/LOST → OPEN |
+| GET | `/api/v1/users` | `user:read` | org user directory (assignee picker) + each user's `timezone` |
+| PATCH | `/api/v1/me/timezone` | `user:read` | `{ timezone }` — IANA tz for reminders/agenda |
+| GET | `/api/v1/tasks` | `task:read` | `?bucket=overdue\|today\|upcoming\|all&type=&status=&priority=&assigneeId=(me)&relatedType=&relatedId=&from=&to=&search=` |
+| POST | `/api/v1/tasks` | `task:manage` | Task + `reminders:[{minutesBefore,channels?}]`; `assigneeId` defaults to creator |
+| GET | `/api/v1/tasks/agenda` | `task:read` | `?assigneeId=&type=` → `{ timezone, overdue[], today[], upcoming[] }` in the assignee's local day |
+| GET/PATCH/DELETE | `/api/v1/tasks/:id` | `task:read` / `task:manage` | PATCH re-syncs reminders when `reminders` or the anchor changes |
+| POST | `/api/v1/tasks/:id/complete` | `task:manage` | `{ outcome? }` — sets DONE + `completedAt`, cancels reminders, emits `TASK_COMPLETED` |
+| POST | `/api/v1/tasks/:id/cancel` | `task:manage` | cancels the task + its pending reminders |
+| POST | `/api/v1/tasks/:id/reschedule` | `task:manage` | `{ dueAt?/startAt?/endAt? }` — shifts reminders, preserving each offset |
+| POST | `/api/v1/tasks/:id/snooze` | `task:manage` | `{ remindAt }` — reschedules the reminder to a new time |
+| POST | `/api/v1/tasks/:id/reassign` | `task:manage` | `{ assigneeId }` — the pending reminder redirects to the new owner |
+| GET | `/api/v1/notifications` | `user:read` | `?unread=true&cursor=&limit=` → `{ data, nextCursor, unreadCount }` |
+| GET | `/api/v1/notifications/unread-count` | `user:read` | `{ count }` |
+| POST | `/api/v1/notifications/:id/read` \| `/read-all` | `user:read` | mark one / all read (emits a live unread count) |
+| POST | `/api/v1/push-tokens` | `user:read` | `{ token, platform: IOS\|ANDROID }` — register an Expo device token (UNIQUE) |
+| DELETE | `/api/v1/push-tokens` | `user:read` | `{ token }` — unregister |
+
+Realtime: clients open a Socket.io connection to the **`/notifications`**
+namespace (`auth: { token }`, Clerk-verified), join a per-user room, and receive
+`notification` (new `Notification`) + `unread_count` (`{ count }`) events.
+
+### Reminder engine + notifications (M3)
+
+Reminders are plain DB rows (`status = SCHEDULED`), so scheduling is **inherently
+restart-safe** — there are no in-memory timers. A **repeatable BullMQ sweep**
+(every `REMINDER_SWEEP_INTERVAL_MS`, default 60s) selects due & `SCHEDULED`
+reminders, **claims each atomically** (`SCHEDULED → SENT` in one guarded UPDATE),
+and enqueues a **send** job keyed by the reminder id. The send worker
+(concurrency-capped by `REMINDER_SEND_CONCURRENCY` to throttle storms) fans out a
+notification to the task's **current** assignee. This gives the guarantees:
+
+- **Restart-safe** — a reminder that came due while the worker was down is still
+  `SCHEDULED` with a past `remindAt`, so the next sweep catches it.
+- **Exactly once** — the atomic claim + per-reminder job id mean no reminder fires
+  twice, even with overlapping sweeps.
+- **Redirect on reassign** — the recipient is resolved at send time, so a
+  reassigned task's pending reminder reaches the new owner.
+- **Skips stale** — reminders for a DONE/CANCELLED/deleted task are dropped.
+
+`NotificationService.fanOut(...)` is the single channel-adapter fan-out: it always
+creates the durable in-app `Notification` row (seen on next load even if the user
+was offline), then delivers each requested channel **exactly once** — **IN_APP**
+(Socket.io room emit), **EMAIL** (Resend HTTP API if `RESEND_API_KEY` is set, else
+logged), **PUSH** (Expo Push API; tokens Expo reports as `DeviceNotRegistered`
+are pruned). `deliveredChannels` records what succeeded.
 
 ### Activity timeline
 
 `ActivityService.emit(...)` is the shared timeline emitter called by **every**
 mutation. It writes an `ActivityEvent` (`CREATED`, `UPDATED`, `NOTE_ADDED`,
-`TAG_ADDED`, `STATUS_CHANGED`, `CONVERTED`) — distinct from the infra `AuditLog`
-(written automatically by the `AuditInterceptor` on every mutating request).
+`TAG_ADDED`, `STATUS_CHANGED`, `CONVERTED`, and M3's `TASK_CREATED` /
+`TASK_UPDATED` / `TASK_COMPLETED` / `TASK_CANCELLED`) — distinct from the infra
+`AuditLog` (written automatically by the `AuditInterceptor` on every mutating
+request). Task events are emitted onto the **related** record's timeline, so a
+follow-up shows up on its contact/company/lead/deal.
 
 ## Data model (M1)
 
@@ -212,6 +270,24 @@ activity), mirrors the event onto the linked contact/company timelines, and sets
 returns per-stage `count`, `sumMinor`, and `weightedMinor = sumMinor ×
 probability / 100` (rounded, integer).
 
+### Data model (M3 — activity)
+
+`ActivityEventType` gains `TASK_CREATED`/`TASK_UPDATED`/`TASK_COMPLETED`/
+`TASK_CANCELLED`; `User` gains a `timezone` (IANA, default `UTC`).
+
+- **Task** — type (`TASK`/`FOLLOW_UP`/`MEETING`/`CALL`), title, description,
+  status (`OPEN`/`DONE`/`CANCELLED`), priority (`LOW`/`MEDIUM`/`HIGH`), `dueAt?`,
+  `startAt?`/`endAt?` (meetings), location, meetingUrl, `assigneeId`,
+  `createdById`, `relatedType?`/`relatedId?` (→ contact/company/lead/deal),
+  `completedAt`, `outcome`
+- **Reminder** — taskId, `remindAt` (UTC), `channels[]`
+  (`IN_APP`/`EMAIL`/`PUSH`), status (`SCHEDULED`/`SENT`/`CANCELLED`), `sentAt`
+  (append-only; one row per reminder)
+- **Notification** — userId (recipient), type
+  (`REMINDER`/`ASSIGNMENT`/`MENTION`/`SYSTEM`), title, body,
+  `relatedType?`/`relatedId?`, `taskId?`, `readAt`, `deliveredChannels[]`
+- **PushToken** — userId, token (UNIQUE), platform (`IOS`/`ANDROID`), lastSeenAt
+
 ## RBAC model
 
 Permissions and role→permission grants are defined once in
@@ -221,13 +297,22 @@ Permissions and role→permission grants are defined once in
 - **owner** — all permissions
 - **admin** — all CRM read + manage (contacts/companies/leads/tags/notes/custom
   fields/**pipelines/deals**) + activity read
-- **member** — read-only across CRM (proves the 403 path on any `:manage` route)
+- **member** — read-only across CRM, **plus `task:manage`** so reps manage their
+  own tasks/follow-ups (still proves the 403 path on other `:manage` routes)
+
+Notifications and push tokens are per-user and gated by `user:read` (held by
+every role) — a user only ever sees/mutates their own.
 
 ## Testing
 
 ```bash
 pnpm --filter @crm/api test        # unit: custom-field validation, activity emitter, tag uniqueness,
                                     #   weighted-value math, guards
+                                    #   M3 — timezone→remindAt math (DST), reminder (re)schedule/cancel/
+                                    #        snooze/shift, sweep claims only due+SCHEDULED (atomic, once),
+                                    #        send skips DONE + redirects to current assignee, notification
+                                    #        fan-out delivers each channel once + prunes stale push tokens,
+                                    #        agenda buckets in the assignee timezone
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -294,9 +379,11 @@ quick-add creates a record that appears in the list.
   `packages/types`; it composes with the global class-validator pipe (a no-op for
   plain-object params).
 - **Mobile navigation is hand-rolled** (a lightweight screen-stack context) to
-  stay dependency-free per the existing app's minimalism; no offline, no push.
-- Forms omit an owner picker (no users-list endpoint in M1); the server defaults
-  `ownerId` to the current user.
+  stay dependency-free per the existing app's minimalism; no offline. (Push is
+  added in M3 via `expo-notifications`, guarded to degrade gracefully.)
+- M1/M2 forms omit an owner picker (no users-list endpoint then); the server
+  defaults `ownerId` to the current user. M3 adds `GET /users` for the task
+  assignee picker.
 - **Money is integer minor units** (`amountMinor`) + an ISO-4217 `currency`
   everywhere; clients divide by 100 only for display. Deals default to `USD`.
 - **Stage/status split**: a deal's stage changes only via `/move` (or `/reopen`);
@@ -311,3 +398,39 @@ quick-add creates a record that appears in the list.
   opening history row (`fromStageId=null`) is written at deal creation.
 - **Web drag-and-drop uses native HTML5 DnD** (no dnd dependency); mobile changes
   stage via a picker (no board), per the M2 non-goals.
+
+## Assumptions (M3 — activity)
+
+- **Reminders are DB-row-driven, not timer-driven.** Scheduling just writes
+  `SCHEDULED` rows; a 60s BullMQ sweep polls them. This is what makes the engine
+  restart-safe with no reconciliation logic, and lets the atomic `SCHEDULED→SENT`
+  claim (plus a per-reminder job id) guarantee each reminder fires exactly once.
+- **Reminder offsets are relative** (`minutesBefore` the anchor = `startAt` for
+  meetings, else `dueAt`). `remindAt = anchor − offset`, and the anchor is an
+  absolute UTC instant, so a "9am reminder" fires at 9am the assignee's local time
+  because the client sends the correct instant. The stored `User.timezone` is used
+  for **DST-correct** display and for bucketing agenda "overdue/today/upcoming"
+  against the assignee's local day (`zonedWallClockToUtc` / `startOfNextLocalDayUtc`
+  are unit-tested, incl. EDT↔EST and +05:30).
+- **The in-app row is the source of truth.** `fanOut` always persists the
+  `Notification` (so an offline user sees it next load); email/push are
+  best-effort side channels wrapped so a channel failure never blocks the others.
+  Each channel is attempted once per notification; `deliveredChannels` records
+  successes.
+- **Email/push are dependency-free adapters.** Email uses the Resend HTTP API via
+  `fetch` (or logs when `RESEND_API_KEY` is unset); push uses the Expo Push API via
+  `fetch` (no `expo-server-sdk`). Swapping in SES/Postmark/FCM is a one-method
+  change behind the same adapter interface.
+- **Reassign redirects by resolution, not row rewrite.** The send worker resolves
+  the task's *current* assignee at fire time, so pending reminders reach the new
+  owner without touching reminder rows. Complete/cancel/delete cancel pending
+  reminders; reschedule shifts them preserving each offset.
+- **Notifications/push tokens are self-scoped** (gated by `user:read`); tasks use
+  a new `task:read`/`task:manage` pair (members get both to run their own work).
+- **Socket.io shares the API port** (`/notifications` namespace) and authenticates
+  the handshake with the Clerk token; rooms are `org:{org}:user:{user}` so there is
+  no cross-tenant bleed.
+- **Mobile push degrades gracefully.** Registration is wrapped in try/catch and
+  no-ops on simulators / Expo Go limitations, so the rest of the app always works;
+  a real device with a dev/EAS build receives pushes and tapping one opens the task.
+  Per the non-goals, there is no offline task creation and no external calendar sync.

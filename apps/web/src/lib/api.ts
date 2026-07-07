@@ -67,11 +67,41 @@ import {
   type UpdatePipelineInput,
   type UpdateStageInput,
 } from '@crm/types';
+import {
+  AgendaResponseSchema,
+  NotificationListResponseSchema,
+  NotificationSchema,
+  OrgUserListResponseSchema,
+  TaskListResponseSchema,
+  TaskSchema,
+  UnreadCountResponseSchema,
+  type AgendaResponse,
+  type CompleteTaskInput,
+  type CreateTaskInput,
+  type Notification,
+  type NotificationListResponse,
+  type OrgUserListResponse,
+  type ReassignTaskInput,
+  type RescheduleTaskInput,
+  type SnoozeTaskInput,
+  type Task,
+  type TaskListResponse,
+  type TaskPriority,
+  type TaskStatus,
+  type TaskType,
+  type UnreadCountResponse,
+  type UpdateTaskInput,
+} from '@crm/types';
 import { z, type ZodType } from 'zod';
 
 const StageArrayResponseSchema = z.object({ data: z.array(StageSchema) });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+/** Base API origin — used by the Socket.io client to build the notifications URL. */
+export function apiBaseUrl(): string {
+  return API_URL;
+}
 
 /**
  * Core request helper: adds the Clerk bearer token, disables caching, throws a
@@ -335,4 +365,93 @@ export function reopenDeal(token: string, id: string, toStageId?: string): Promi
 }
 export function getDealHistory(token: string, id: string): Promise<StageHistoryListResponse> {
   return request(token, `${API_ROUTES.deals}/${id}/history`, StageHistoryListResponseSchema);
+}
+
+// --- Tasks (M3) -------------------------------------------------------------
+export type TaskListParams = Partial<{
+  cursor: string;
+  limit: number;
+  search: string;
+  sort: string;
+  order: 'asc' | 'desc';
+  type: TaskType;
+  status: TaskStatus;
+  priority: TaskPriority;
+  bucket: 'overdue' | 'today' | 'upcoming' | 'all';
+  assigneeId: string;
+  relatedType: string;
+  relatedId: string;
+  from: string;
+  to: string;
+}>;
+
+export function listTasks(token: string, params: TaskListParams = {}): Promise<TaskListResponse> {
+  return request(token, `${API_ROUTES.tasks}${qs(params)}`, TaskListResponseSchema);
+}
+export function getTask(token: string, id: string): Promise<Task> {
+  return request(token, `${API_ROUTES.tasks}/${id}`, TaskSchema);
+}
+export function createTask(token: string, body: CreateTaskInput): Promise<Task> {
+  return request(token, API_ROUTES.tasks, TaskSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function updateTask(token: string, id: string, body: UpdateTaskInput): Promise<Task> {
+  return request(token, `${API_ROUTES.tasks}/${id}`, TaskSchema, { method: 'PATCH', body: JSON.stringify(body) });
+}
+export function completeTask(token: string, id: string, body: CompleteTaskInput = {}): Promise<Task> {
+  return request(token, `${API_ROUTES.tasks}/${id}/complete`, TaskSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function cancelTask(token: string, id: string): Promise<Task> {
+  return request(token, `${API_ROUTES.tasks}/${id}/cancel`, TaskSchema, { method: 'POST', body: JSON.stringify({}) });
+}
+export function rescheduleTask(token: string, id: string, body: RescheduleTaskInput): Promise<Task> {
+  return request(token, `${API_ROUTES.tasks}/${id}/reschedule`, TaskSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function snoozeTask(token: string, id: string, body: SnoozeTaskInput): Promise<Task> {
+  return request(token, `${API_ROUTES.tasks}/${id}/snooze`, TaskSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function reassignTask(token: string, id: string, body: ReassignTaskInput): Promise<Task> {
+  return request(token, `${API_ROUTES.tasks}/${id}/reassign`, TaskSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function deleteTask(token: string, id: string): Promise<void> {
+  return request(token, `${API_ROUTES.tasks}/${id}`, null, { method: 'DELETE' });
+}
+export function getAgenda(
+  token: string,
+  params: { assigneeId?: string; type?: TaskType } = {},
+): Promise<AgendaResponse> {
+  return request(token, `${API_ROUTES.agenda}${qs(params)}`, AgendaResponseSchema);
+}
+
+// --- Notifications (M3) -----------------------------------------------------
+export function listNotifications(
+  token: string,
+  params: { cursor?: string; limit?: number; unread?: 'true' } = {},
+): Promise<NotificationListResponse> {
+  return request(token, `${API_ROUTES.notifications}${qs(params)}`, NotificationListResponseSchema);
+}
+export function getUnreadCount(token: string): Promise<UnreadCountResponse> {
+  return request(token, `${API_ROUTES.notifications}/unread-count`, UnreadCountResponseSchema);
+}
+export function markNotificationRead(token: string, id: string): Promise<Notification> {
+  return request(token, `${API_ROUTES.notifications}/${id}/read`, NotificationSchema, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+export function markAllNotificationsRead(token: string): Promise<{ updated: number }> {
+  return request(token, `${API_ROUTES.notifications}/read-all`, z.object({ updated: z.number() }), {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+// --- Users + timezone (M3) --------------------------------------------------
+export function listUsers(token: string): Promise<OrgUserListResponse> {
+  return request(token, API_ROUTES.users, OrgUserListResponseSchema);
+}
+export function updateMyTimezone(token: string, timezone: string): Promise<{ timezone: string }> {
+  return request(token, `${API_ROUTES.me}/timezone`, z.object({ timezone: z.string() }), {
+    method: 'PATCH',
+    body: JSON.stringify({ timezone }),
+  });
 }
