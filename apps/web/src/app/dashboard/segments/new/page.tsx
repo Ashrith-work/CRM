@@ -28,6 +28,18 @@ export default function NewSegmentPage() {
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState('');
 
+  // "Build segment from this" — hydrate the builder from a ?preset= rule tree.
+  useEffect(() => {
+    try {
+      const preset = new URLSearchParams(window.location.search).get('preset');
+      if (!preset) return;
+      const parsed = JSON.parse(preset);
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.rules)) setRules(parsed as RuleGroup);
+    } catch {
+      /* ignore a malformed preset */
+    }
+  }, []);
+
   // Live preview (debounced) as the tree changes.
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);

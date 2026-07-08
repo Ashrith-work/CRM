@@ -4,8 +4,11 @@ import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { Env } from '../config/env';
 import { RfmRefreshService } from './rfm-refresh.service';
+import { ChurnScoreService } from './churn-score.service';
 import { SegmentService } from '../segments/segment.service';
 import { ANALYTICS_QUEUE, RFM_REFRESH_JOB_ID, type AnalyticsRefreshJob } from './analytics.constants';
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Nightly analytics refresh (tiered per CLAUDE.md: revenue on ingest, RFM
@@ -20,6 +23,7 @@ export class AnalyticsProcessor extends WorkerHost implements OnModuleInit {
   constructor(
     private readonly config: ConfigService<Env, true>,
     private readonly rfm: RfmRefreshService,
+    private readonly churn: ChurnScoreService,
     private readonly segments: SegmentService,
     @InjectQueue(ANALYTICS_QUEUE) private readonly queue: Queue,
   ) {
@@ -28,24 +32,18 @@ export class AnalyticsProcessor extends WorkerHost implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     const every = this.config.get('RFM_REFRESH_INTERVAL_MS', { infer: true });
-    // Repeatable nightly refresh…
-    await this.queue.add('refresh', { type: 'refresh' } satisfies AnalyticsRefreshJob, {
-      repeat: { every },
-      jobId: RFM_REFRESH_JOB_ID,
-      removeOnComplete: true,
-      removeOnFail: 20,
-    });
-    // …plus a one-time run soon after boot so RFM is populated immediately.
-    await this.queue.add('refresh', { type: 'refresh' } satisfies AnalyticsRefreshJob, {
-      jobId: 'rfm-refresh-boot',
-      delay: 10_000,
-      removeOnComplete: true,
-      removeOnFail: 5,
-    });
-    this.logger.log(`RFM refresh scheduled every ${every}ms`);
+    // Nightly: views + RFM + CLV + dynamic segments.
+    await this.queue.add('refresh', { type: 'refresh' } satisfies AnalyticsRefreshJob, { repeat: { every }, jobId: RFM_REFRESH_JOB_ID, removeOnComplete: true, removeOnFail: 20 });
+    // Weekly: heuristic churn (tiered refresh).
+    await this.queue.add('churn', { type: 'churn' }, { repeat: { every: WEEK_MS }, jobId: 'churn-score-repeat', removeOnComplete: true, removeOnFail: 20 });
+    // One-time runs soon after boot so everything is populated immediately.
+    await this.queue.add('refresh', { type: 'refresh' } satisfies AnalyticsRefreshJob, { jobId: 'rfm-refresh-boot', delay: 10_000, removeOnComplete: true, removeOnFail: 5 });
+    await this.queue.add('churn', { type: 'churn' }, { jobId: 'churn-boot', delay: 20_000, removeOnComplete: true, removeOnFail: 5 });
+    this.logger.log(`Analytics refresh scheduled (views+RFM+CLV every ${every}ms; churn weekly)`);
   }
 
-  async process(): Promise<{ rfm: { orgs: number; customers: number }; segments: number }> {
+  async process(job: { name: string }): Promise<unknown> {
+    if (job.name === 'churn') return this.churn.scoreAll();
     const rfm = await this.rfm.refreshAll();
     const segments = await this.segments.refreshDynamic();
     return { rfm, segments };

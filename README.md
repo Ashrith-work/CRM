@@ -1,4 +1,4 @@
-# CRM — M0–M5 + Commerce (Shopify) + Customer 360 + RFM Analytics + Cart Recovery (MVP loop)
+# CRM — M0–M5 + Commerce + Customer 360 + RFM + Cart Recovery (MVP) + Deep Analytics
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -56,6 +56,13 @@ clients never duplicate it.
 > on purchase**, with a dashboard tile reporting **recovery rate + recovered
 > revenue** on real orders. Restart-safe sweeps (not per-step delayed jobs); every
 > send is consent-checked + logged; blocked sends are audited, never silent.
+> **Deep Analytics (P2.1):** four more materialized views — **revenue_daily**
+> (org-timezone buckets), **cohort_retention**, **customer_clv**, and
+> **contribution_margin** — plus a **heuristic (non-ML) churn score** via a weekly
+> job. Wires the M2 CLV/churn badges to real values, and **every analytics chart
+> ends in a "build segment from this" action** (insight → segment → campaign).
+> Margin is real when per-SKU COGS exists, otherwise labelled "Estimated (excludes
+> COGS)". Metrics match a hand-computed golden dataset.
 > **Milestone 5:** call management — **MyOperator** telephony (click-to-call +
 > inbound/outbound webhooks) logging every call to the matched contact's
 > timeline, with recordings stored in **Cloudinary** and playable ONLY with
@@ -153,6 +160,9 @@ content on both clients. It **wipes the seeded tables first**, then inserts:
 - A **recovery campaign** (3 steps) + marketing `Consent` (~70% opted in), a few
   abandoned carts, one **recovered** cart, and one **suppressed** customer — so the
   recovery tile shows real rate + revenue, and the send/enrollment sweeps run live.
+- Products carry per-SKU **COGS** and the org is **hasCogs=true**, so contribution
+  margin is **real**; CLV bands + heuristic churn populate on the first refresh
+  (~10–20s after boot, or `POST /analytics/refresh`).
 
 ```bash
 pnpm db:seed                 # SMALL (fast local demo) — the default
@@ -292,6 +302,35 @@ and audit-logged. List endpoints are cursor-paginated and return
 | POST | `/api/v1/segments` | `segment:manage` | save (static snapshot \| dynamic + refreshCron) |
 | GET | `/api/v1/segments` \| `/:id` \| `/:id/members` | `segment:read` | list / detail / members (masked per role) |
 | POST | `/api/v1/segments/:id/refresh` | `segment:manage` | recompute a dynamic segment's membership |
+| GET | `/api/v1/analytics/revenue-trend` | `analytics:read` | net revenue per day (org tz), from `revenue_daily` |
+| GET | `/api/v1/analytics/cohorts` | `analytics:read` | cohort retention grid, from `cohort_retention` |
+| GET | `/api/v1/analytics/clv-distribution` | `analytics:read` | CLV High/Mid/Low bands, from `customer_clv` |
+| GET | `/api/v1/analytics/churn-watchlist` | `analytics:read` | at-risk **high-CLV first**; heuristic churn |
+| GET | `/api/v1/analytics/margin` | `analytics:read` | contribution margin (real or **estimate-labelled**) |
+
+### Deep analytics (P2.1)
+
+- **Four materialized views** (raw SQL, endpoints only READ them):
+  `revenue_daily` (net revenue per **org-timezone** day), `cohort_retention`
+  (first-purchase-month cohorts × monthly periods; period 0 = acquisition),
+  `customer_clv` (historical net revenue, banded High/Mid/Low by tertile), and
+  `contribution_margin` (per org-day). Paid/fulfilled only; refunds subtract.
+- **CLV/churn badges are real** — the nightly refresh writes `clvMinor`/`clvBand`
+  into `CustomerFeatures`; a **weekly heuristic churn** job writes
+  `churnRisk`/`churnBand`. The M2 profile badges now show real values + tooltips.
+- **Heuristic churn (explainable, non-ML)** — `daysSinceLast ÷ the customer's own
+  median inter-purchase gap`: ≤1× = Low, ≤2× = Medium, >2× = High; **<2 orders =
+  Unknown** (never over-flag). The rule is defensible per customer.
+- **Margin honesty** — real (`net − COGS`) only when the org **hasCogs** and
+  products carry `costMinor`; otherwise a labelled **"Estimated margin (excludes
+  COGS)"** everywhere it appears (UI, glossary, API `label`). Never presented as
+  exact.
+- **Insight → action** — every chart has a **"build segment from this"** action
+  that opens M3's segment builder pre-filled (VIP from High-CLV, save at-risk VIPs
+  from High-churn+High-CLV, win-back from long-inactive), closing the loop into an
+  M4 campaign audience. `clvBand`/`churnBand` are real segment fields.
+- **Tiered refresh** — revenue on ingest, RFM/CLV/views nightly, churn weekly
+  (also a one-time run ~10–20s after boot).
 | GET | `/api/v1/campaigns` \| `/:id/enrollments` | `campaign:read` | recovery campaign(s) + enrollments (masked per role) |
 | GET | `/api/v1/campaigns/recovery-stats` | `campaign:read` | recovery rate + recovered revenue (the MVP tile) |
 | POST | `/api/v1/campaigns/run` | `campaign:manage` | trigger the enrollment + send sweeps now |
@@ -613,6 +652,15 @@ New tables, all org-scoped with `UNIQUE(org, externalId)` and integer-minor mone
 - **SegmentMembership** — `UNIQUE(segmentId, customerId)`; snapshot for static,
   recomputed for dynamic
 
+### Data model (deep analytics)
+
+- **Materialized views** `revenue_daily`, `cohort_retention`, `customer_clv`,
+  `contribution_margin` (raw SQL — see the `..._p21_analytics` migration)
+- **Organization** gains `timezone` (day-bucketing) + `hasCogs` (margin honesty);
+  **Product** gains `costMinor` (per-SKU COGS)
+- **CustomerFeatures** gains `clvBand` (High/Mid/Low) + `churnBand`
+  (Low/Medium/High/Unknown), and now populates `clvMinor` + `churnRisk`
+
 ### Data model (cart recovery)
 
 - **Consent** is now polymorphic — `contactId?` (call recording, M5) OR
@@ -684,6 +732,9 @@ pnpm --filter @crm/api test        # unit: custom-field validation, activity emi
                                     #        consent gate (blocked + audit-logged), suppression respected,
                                     #        provider outage → DELAYED + retry, idempotent enrollment,
                                     #        recovery-rate vs HAND-COMPUTED fixture, Resend webhooks
+                                    #   Deep analytics — GOLDEN dataset for the views: CLV tertile bands,
+                                    #        cohort retention % (period-0 boundary), margin WITH + WITHOUT
+                                    #        COGS (real vs estimate); heuristic churn bands (median-gap rule)
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -965,3 +1016,31 @@ quick-add creates a record that appears in the list.
   unsubscribe link wrote a Suppression row.
 - **Non-goals honored** — email only (WhatsApp/SMS is the next channel behind the
   same interface), one campaign type (ABANDONED_CART), no AI copy, no mobile.
+
+## Assumptions (deep analytics — P2.1)
+
+- **Architecture adaptation** (same retrofit) — the 4 views are raw SQL in the
+  `..._p21_analytics` migration; the refresh + weekly churn workers run in-process
+  (`apps/api/src/analytics`); dashboards in `apps/web`; glossary in
+  `packages/types` — not `packages/db` / `apps/worker` / `packages/shared`.
+- **CLV is historical, not predictive** — MVP CLV = lifetime net revenue (paid/
+  fulfilled, refund-adjusted), banded by tertile per org. Predictive CLV + ML churn
+  are Phase 3 (non-goals).
+- **Churn is a transparent heuristic** — recency vs the customer's own median
+  inter-purchase gap (documented above); RFM recency correlates but the gap ratio
+  is the primary, defensible signal. New customers (<2 orders) are **Unknown**, not
+  flagged.
+- **Margin honesty is enforced** — the demo org (`Nerige`) has `hasCogs=true` +
+  seeded per-SKU `costMinor`, so it shows **real** contribution margin; without
+  COGS the same code path returns an `is_estimate` flag and the "Estimated margin
+  (excludes COGS)" label (surfaced in the API, glossary, and UI). The golden test
+  asserts **both** paths.
+- **Timezone bucketing** — `revenue_daily`/`cohort_retention`/`contribution_margin`
+  bucket `placedAt` (stored UTC) into the **org timezone** (`Asia/Kolkata` default),
+  not a UTC day.
+- **"Build segment from this"** reuses M3's engine — the chart passes a pre-filled
+  rule tree to the builder (the cohort win-back uses `daysSinceLast` as a proxy for
+  cohort drop-off, since cohort isn't a per-customer feature column).
+- **Golden dataset (DB-backed)** runs the real views against Postgres (as in CI):
+  CLV bands, cohort retention % incl. the period-0 boundary, and margin with +
+  without COGS — all asserted exactly; churn bands via a pure deterministic test.

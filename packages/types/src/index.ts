@@ -57,4 +57,5 @@ export const API_ROUTES = {
   // M4 abandoned-cart recovery.
   campaigns: `/${API_PREFIX}/campaigns`,
   resendWebhook: `/${API_PREFIX}/webhooks/resend`,
+  // P2.1 deep analytics (revenue/cohorts/clv/churn/margin) share /analytics.
 } as const;

@@ -17,8 +17,10 @@ export const CustomerBadgesSchema = z.object({
   fScore: z.number().int().nullable(),
   mScore: z.number().int().nullable(),
   daysSinceLast: z.number().int().nullable(),
-  clv: z.number().int().nullable(), // minor units (stub)
-  churnRisk: z.number().nullable(), // stub
+  clv: z.number().int().nullable(), // minor units (real — historical CLV)
+  clvBand: z.string().nullable(), // High | Mid | Low
+  churnRisk: z.number().nullable(), // 0..1 heuristic score
+  churnBand: z.string().nullable(), // Low | Medium | High | Unknown
   apparelSize: z.string().nullable(),
   fit: z.string().nullable(),
   styleAffinity: z.string().nullable(),

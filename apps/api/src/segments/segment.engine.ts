@@ -21,7 +21,8 @@ const FIELD_COLUMN: Record<SegmentField, Column> = {
   totalOrders: { col: 'orderCount', numeric: true },
   netRevenueMinor: { col: 'netRevenueMinor', numeric: true },
   aovMinor: { col: 'avgOrderValueMinor', numeric: true },
-  clvBand: { col: 'clvMinor', numeric: true }, // CLV is a stub — filters on the (null) column
+  clvBand: { col: 'clvBand', numeric: false }, // real: High | Mid | Low
+  churnBand: { col: 'churnBand', numeric: false }, // Low | Medium | High | Unknown
   rScore: { col: 'rScore', numeric: true },
   fScore: { col: 'fScore', numeric: true },
   mScore: { col: 'mScore', numeric: true },

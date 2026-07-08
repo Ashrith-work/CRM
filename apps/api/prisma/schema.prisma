@@ -18,6 +18,10 @@ model Organization {
   slug       String   @unique
   // Milestone 5 — maps an inbound MyOperator webhook (its company id) to this org.
   myoperatorCompanyId String? @unique
+  // P2.1 analytics — IANA tz for revenue/cohort day-bucketing; hasCogs governs
+  // whether contribution margin is real (COGS) or a labelled estimate.
+  timezone   String   @default("Asia/Kolkata")
+  hasCogs    Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -176,6 +180,8 @@ model Product {
   externalId     String
   title          String
   imageUrl       String?
+  /** P2.1 — per-unit COGS (paise) for real contribution margin; null ⇒ estimate. */
+  costMinor      Int?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
@@ -353,9 +359,11 @@ model CustomerFeatures {
   rSegment      String?
   rfmScore      String? // "R5 F4 M3" combined code (kept for display)
   daysSinceLast Int?
-  // Placeholders — populated later (Phase 2).
+  // P2.1 — real CLV (historical net) + band, heuristic churn score + band.
   clvMinor      Int?
-  churnRisk     Float?
+  clvBand       String? // High | Mid | Low
+  churnRisk     Float?  // 0..1 heuristic score
+  churnBand     String? // Low | Medium | High | Unknown
   apparelSize   String?
   fit           String?
   styleAffinity String?

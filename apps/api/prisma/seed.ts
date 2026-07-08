@@ -704,7 +704,9 @@ async function seedPrimaryOrg(): Promise<void> {
   bump('integrations', 1);
 
   const productTitles = ['Cotton Tee', 'Linen Shirt', 'Denim Jacket', 'Chino Pants', 'Hoodie', 'Summer Dress', 'Wool Scarf', 'Sneakers'];
-  const products = productTitles.map((title, i) => ({ id: mkId('pr'), organizationId: org.id, externalId: `shp_prod_${1000 + i}`, title, imageUrl: `https://cdn.nerige.example/${i}.jpg`, createdAt: HISTORY_START, updatedAt: HISTORY_START }));
+  // Nerige has per-SKU COGS → real contribution margin (hasCogs set below).
+  const products = productTitles.map((title, i) => ({ id: mkId('pr'), organizationId: org.id, externalId: `shp_prod_${1000 + i}`, title, imageUrl: `https://cdn.nerige.example/${i}.jpg`, costMinor: rupeesToPaise(faker.number.int({ min: 150, max: 1500 })), createdAt: HISTORY_START, updatedAt: HISTORY_START }));
+  await prisma.organization.update({ where: { id: org.id }, data: { hasCogs: true } });
   await prisma.product.createMany({ data: products });
   bump('products', products.length);
 
