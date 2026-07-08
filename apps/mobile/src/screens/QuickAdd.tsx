@@ -21,9 +21,7 @@ export function QuickAddContact(): React.JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await createContact(token, {
+      await createContact(getToken, {
         firstName: first.trim(),
         lastName: last.trim(),
         email: email.trim() || undefined,
@@ -63,9 +61,7 @@ export function QuickAddLead(): React.JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await createLead(token, {
+      await createLead(getToken, {
         firstName: first.trim(),
         lastName: last.trim(),
         email: email.trim() || undefined,

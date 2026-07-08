@@ -37,9 +37,7 @@ function EditForm({ deal }: { deal: Deal }): React.JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await updateDeal(token, deal.id, {
+      await updateDeal(getToken, deal.id, {
         name: name.trim(),
         amountMinor: parseAmountToMinor(amount),
         expectedCloseDate: closeDate.trim() ? closeDate.trim() : null,

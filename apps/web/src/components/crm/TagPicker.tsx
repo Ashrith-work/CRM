@@ -25,9 +25,7 @@ export function TagPicker({
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await listTags(token);
+      const res = await listTags(getToken);
       setTags(res.data);
     } catch (err) {
       setError((err as Error).message);
@@ -50,9 +48,7 @@ export function TagPicker({
     const name = newName.trim();
     if (!name) return;
     try {
-      const token = await getToken();
-      if (!token) return;
-      const tag = await createTag(token, { name, color: randomColor() });
+      const tag = await createTag(getToken, { name, color: randomColor() });
       setTags((prev) => [...prev, tag]);
       onChange([...selected, tag.id]);
       setNewName('');

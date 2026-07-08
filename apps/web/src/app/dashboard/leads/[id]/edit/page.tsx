@@ -20,9 +20,7 @@ export default function EditLeadPage() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setLead(await getLead(token, id));
+      setLead(await getLead(getToken, id));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -70,8 +68,6 @@ export default function EditLeadPage() {
           submitLabel="Save changes"
           onCancel={() => router.push(`/dashboard/leads/${id}`)}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: UpdateLeadInput = {
               firstName: core.firstName,
               lastName: core.lastName,
@@ -82,7 +78,7 @@ export default function EditLeadPage() {
               customFields,
               tagIds,
             };
-            await updateLead(token, id, body);
+            await updateLead(getToken, id, body);
             router.push(`/dashboard/leads/${id}`);
           }}
         />

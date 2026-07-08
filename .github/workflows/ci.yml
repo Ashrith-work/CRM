@@ -42,6 +42,10 @@ jobs:
       REDIS_URL: redis://localhost:6379
       # Dummy value — tests stub Clerk; only required for env validation at runtime.
       CLERK_SECRET_KEY: sk_test_ci_dummy
+      # Dummy publishable key (format = pk_test_<base64("clerk.example.com$")>) so
+      # `next build` can prerender the web app without real Clerk credentials.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
+      NEXT_PUBLIC_API_URL: http://localhost:4000
 
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +64,11 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm --filter @crm/api db:generate
+
+      # Build shared types first so @crm/types/dist exists before the seed +
+      # migrate steps (the seed imports @crm/types at runtime via tsx).
+      - name: Build shared types
+        run: pnpm --filter @crm/types build
 
       - name: Apply database migrations
         run: pnpm --filter @crm/api db:migrate:deploy

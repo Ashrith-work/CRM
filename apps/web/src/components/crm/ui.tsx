@@ -6,11 +6,11 @@ import type { ReactNode } from 'react';
 
 export function Card({ title, action, children }: { title?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       {(title || action) && (
         <div className="mb-3 flex items-center justify-between">
           {title && (
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{title}</h2>
           )}
           {action}
         </div>
@@ -23,7 +23,7 @@ export function Card({ title, action, children }: { title?: string; action?: Rea
 export function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex justify-between gap-3 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-500 dark:text-slate-400">{label}</span>
       <span className="text-right font-medium">{value ?? '—'}</span>
     </div>
   );
@@ -44,8 +44,10 @@ export function Button({
 }) {
   const styles: Record<string, string> = {
     primary: 'bg-brand-600 text-white hover:bg-brand-700',
-    secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
-    danger: 'border border-red-300 bg-white text-red-700 hover:bg-red-50',
+    secondary:
+      'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
+    danger:
+      'border border-red-300 bg-white text-red-700 hover:bg-red-50 dark:border-red-900 dark:bg-slate-900 dark:text-red-400 dark:hover:bg-red-950/40',
   };
   return (
     <button
@@ -72,12 +74,12 @@ export function TagBadge({ name, color }: { name: string; color: string }) {
 }
 
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
-  return <p className="py-8 text-center text-sm text-slate-500">{label}</p>;
+  return <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">{label}</p>;
 }
 
 export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
       <p className="font-medium">Something went wrong.</p>
       <p className="mt-1 break-words">{message}</p>
       {onRetry && (
@@ -94,7 +96,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
     <div className="flex items-start justify-between gap-3">
       <div>
         <h1 className="text-2xl font-bold">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -118,7 +120,7 @@ export function Input({
 }) {
   return (
     <label className="block text-sm">
-      <span className="mb-1 block font-medium text-slate-700">
+      <span className="mb-1 block font-medium text-slate-700 dark:text-slate-300">
         {label}
         {required && <span className="text-red-500"> *</span>}
       </span>
@@ -127,7 +129,7 @@ export function Input({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
       />
     </label>
   );

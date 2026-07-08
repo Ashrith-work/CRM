@@ -25,9 +25,7 @@ export default function CompanyDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      const [co, cs] = await Promise.all([getCompany(token, id), listContacts(token, { companyId: id, limit: 100 })]);
+      const [co, cs] = await Promise.all([getCompany(getToken, id), listContacts(getToken, { companyId: id, limit: 100 })]);
       setCompany(co);
       setContacts(cs.data);
     } catch (err) {
@@ -41,9 +39,7 @@ export default function CompanyDetailPage() {
 
   const remove = async () => {
     if (!confirm('Delete this company? Its contacts will be detached, not deleted.')) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteCompany(token, id);
+    await deleteCompany(getToken, id);
     router.push('/dashboard/companies');
   };
 

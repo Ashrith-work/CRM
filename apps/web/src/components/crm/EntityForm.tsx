@@ -53,9 +53,7 @@ export function EntityForm({
 
   const loadDefs = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await listCustomFields(token, entityType);
+      const res = await listCustomFields(getToken, entityType);
       setDefs(res.data);
     } catch (err) {
       setError((err as Error).message);

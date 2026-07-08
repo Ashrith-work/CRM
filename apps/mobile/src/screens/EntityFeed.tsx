@@ -41,9 +41,7 @@ export function NotesSection({
     setBusy(true);
     setError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await createNote(token, { entityType, entityId, body: body.trim() });
+      await createNote(getToken, { entityType, entityId, body: body.trim() });
       setBody('');
       await reload();
       onChanged();
@@ -115,6 +113,15 @@ function describe(ev: ActivityEvent): string {
       return 'Deal lost';
     case 'REOPENED':
       return 'Deal reopened';
+    case 'CALL_LOGGED':
+      return 'Logged a call';
+    case 'CALL_COMPLETED': {
+      const meta = ev.metadata as { durationSeconds?: number | null } | null;
+      const dur = meta?.durationSeconds != null ? ` (${Math.floor(meta.durationSeconds / 60)}m ${String(meta.durationSeconds % 60).padStart(2, '0')}s)` : '';
+      return `Completed a call${dur}`;
+    }
+    case 'CALL_MISSED':
+      return 'Missed a call';
     default:
       return ev.eventType;
   }

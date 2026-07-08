@@ -27,9 +27,7 @@ export default function EditCompanyPage() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setCompany(await getCompany(token, id));
+      setCompany(await getCompany(getToken, id));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -64,8 +62,6 @@ export default function EditCompanyPage() {
           submitLabel="Save changes"
           onCancel={() => router.push(`/dashboard/companies/${id}`)}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: UpdateCompanyInput = {
               name: core.name,
               domain: core.domain || undefined,
@@ -76,7 +72,7 @@ export default function EditCompanyPage() {
               customFields,
               tagIds,
             };
-            await updateCompany(token, id, body);
+            await updateCompany(getToken, id, body);
             router.push(`/dashboard/companies/${id}`);
           }}
         />

@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { colors } from '../ui';
 import { useNav } from '../navigation';
 import { useAuthedLoad } from '../useAuthedLoad';
-import { fetchMe } from '../api';
+import { fetchMe, getUnreadCount } from '../api';
 import { ScreenHeader } from './ScreenHeader';
 
 /** Signed-in landing: greeting from /me + entity navigation. */
@@ -11,6 +11,8 @@ export function HomeMenu(): React.JSX.Element {
   const { signOut } = useAuth();
   const { push } = useNav();
   const { state } = useAuthedLoad((t) => fetchMe(t), []);
+  const { state: unread } = useAuthedLoad((t) => getUnreadCount(t), []);
+  const unreadCount = unread.status === 'ready' ? unread.data.count : 0;
 
   const greeting =
     state.status === 'ready'
@@ -34,6 +36,16 @@ export function HomeMenu(): React.JSX.Element {
       </Text>
 
       <View style={{ gap: 12, marginTop: 16 }}>
+        <MenuItem label="My Tasks" subtitle="Today & overdue" onPress={() => push({ name: 'taskList' })} />
+        <MenuItem label="Agenda" subtitle="Your day, upcoming" onPress={() => push({ name: 'agenda' })} />
+        <MenuItem
+          label="Notifications"
+          subtitle="Reminders & assignments"
+          badge={unreadCount > 0 ? unreadCount : undefined}
+          onPress={() => push({ name: 'notifications' })}
+        />
+        <MenuItem label="My performance" subtitle="Your sales metrics" onPress={() => push({ name: 'performance' })} />
+        <MenuItem label="Calls" subtitle="Your call history" onPress={() => push({ name: 'callHistory' })} />
         <MenuItem label="Pipeline" subtitle="Deals by stage" onPress={() => push({ name: 'pipeline' })} />
         <MenuItem label="Contacts" subtitle="Browse & add people" onPress={() => push({ name: 'list', entity: 'CONTACT' })} />
         <MenuItem label="Companies" subtitle="Browse organizations" onPress={() => push({ name: 'list', entity: 'COMPANY' })} />
@@ -47,10 +59,12 @@ function MenuItem({
   label,
   subtitle,
   onPress,
+  badge,
 }: {
   label: string;
   subtitle: string;
   onPress: () => void;
+  badge?: number;
 }): React.JSX.Element {
   return (
     <TouchableOpacity style={styles.item} onPress={onPress}>
@@ -58,7 +72,14 @@ function MenuItem({
         <Text style={styles.itemLabel}>{label}</Text>
         <Text style={styles.itemSubtitle}>{subtitle}</Text>
       </View>
-      <Text style={styles.chevron}>›</Text>
+      <View style={styles.itemRight}>
+        {badge !== undefined ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge > 99 ? '99+' : badge}</Text>
+          </View>
+        ) : null}
+        <Text style={styles.chevron}>›</Text>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -79,5 +100,8 @@ const styles = StyleSheet.create({
   },
   itemLabel: { fontSize: 17, fontWeight: '700', color: colors.text },
   itemSubtitle: { color: colors.muted, marginTop: 2 },
+  itemRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   chevron: { fontSize: 24, color: colors.muted },
+  badge: { backgroundColor: colors.danger, borderRadius: 999, minWidth: 22, paddingHorizontal: 6, paddingVertical: 2, alignItems: 'center' },
+  badgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });

@@ -28,14 +28,19 @@ export class PermissionsGuard implements CanActivate {
     const ctx = request.userContext;
     if (!ctx) {
       // Authn guard should have populated this; defensively deny.
-      throw new ForbiddenException('Missing user context');
+      throw forbidden('Missing user context');
     }
 
     const granted = new Set(ctx.permissions);
     const missing = required.filter((p) => !granted.has(p));
     if (missing.length > 0) {
-      throw new ForbiddenException(`Missing required permission(s): ${missing.join(', ')}`);
+      throw forbidden(`Missing required permission(s): ${missing.join(', ')}`);
     }
     return true;
   }
+}
+
+/** A 403 carrying a stable machine `code: 'FORBIDDEN'` for clients to branch on. */
+function forbidden(message: string): ForbiddenException {
+  return new ForbiddenException({ statusCode: 403, code: 'FORBIDDEN', error: 'Forbidden', message });
 }

@@ -11,6 +11,7 @@ import { CustomFieldView } from '@/components/crm/CustomFieldView';
 import { TagList } from '@/components/crm/TagPicker';
 import { NoteList } from '@/components/crm/NoteList';
 import { Timeline } from '@/components/crm/Timeline';
+import { TasksSection } from '@/components/crm/TasksSection';
 
 const STATUS_BADGE: Record<string, string> = {
   OPEN: 'bg-brand-50 text-brand-700',
@@ -32,11 +33,9 @@ export default function DealDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      const d = await getDeal(token, id);
+      const d = await getDeal(getToken, id);
       setDeal(d);
-      const [p, h] = await Promise.all([getPipeline(token, d.pipelineId), getDealHistory(token, id)]);
+      const [p, h] = await Promise.all([getPipeline(getToken, d.pipelineId), getDealHistory(getToken, id)]);
       setPipeline(p);
       setHistory(h.data);
     } catch (err) {
@@ -52,9 +51,7 @@ export default function DealDetailPage() {
     setBusy(true);
     setError('');
     try {
-      const token = await getToken();
-      if (!token) return;
-      await moveDeal(token, id, toStageId);
+      await moveDeal(getToken, id, toStageId);
       await load();
       setTimelineKey((k) => k + 1);
     } catch (err) {
@@ -68,9 +65,7 @@ export default function DealDetailPage() {
     setBusy(true);
     setError('');
     try {
-      const token = await getToken();
-      if (!token) return;
-      await reopenDeal(token, id);
+      await reopenDeal(getToken, id);
       await load();
       setTimelineKey((k) => k + 1);
     } catch (err) {
@@ -82,9 +77,7 @@ export default function DealDetailPage() {
 
   const remove = async () => {
     if (!confirm('Delete this deal?')) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteDeal(token, id);
+    await deleteDeal(getToken, id);
     router.push('/dashboard/deals');
   };
 
@@ -229,6 +222,8 @@ export default function DealDetailPage() {
             </ol>
           )}
         </Card>
+
+        <TasksSection relatedType="DEAL" relatedId={id} relatedLabel={deal.name} />
 
         <Card title="Notes">
           <NoteList entityType="DEAL" entityId={id} onAdded={() => setTimelineKey((k) => k + 1)} />

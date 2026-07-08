@@ -31,6 +31,12 @@ function describe(event: ActivityEvent): string {
       return meta.dealName ? `lost deal “${meta.dealName}”` : 'marked this lost';
     case 'REOPENED':
       return meta.dealName ? `reopened deal “${meta.dealName}”` : 'reopened this';
+    case 'CALL_LOGGED':
+      return `logged a ${String(meta.direction ?? '').toLowerCase() || ''} call`.replace('  ', ' ').trim();
+    case 'CALL_COMPLETED':
+      return meta.durationSeconds ? `completed a call (${meta.durationSeconds}s)` : 'completed a call';
+    case 'CALL_MISSED':
+      return 'missed a call';
     default:
       return event.eventType;
   }
@@ -47,6 +53,9 @@ const DOT: Record<string, string> = {
   WON: 'bg-green-600',
   LOST: 'bg-red-500',
   REOPENED: 'bg-amber-500',
+  CALL_LOGGED: 'bg-teal-500',
+  CALL_COMPLETED: 'bg-teal-600',
+  CALL_MISSED: 'bg-rose-500',
 };
 
 /**
@@ -68,9 +77,7 @@ export function Timeline({
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await listActivity(token, entityType, entityId);
+      const res = await listActivity(getToken, entityType, entityId);
       setEvents(res.data);
     } catch (err) {
       setError((err as Error).message);

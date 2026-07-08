@@ -2,6 +2,17 @@ export * from './permissions';
 export * from './schemas';
 export * from './crm';
 export * from './deals';
+export * from './tasks';
+export * from './notifications';
+export * from './users';
+export * from './dashboard';
+export * from './calls';
+export * from './integrations';
+export * from './commerce';
+export * from './customer360';
+export * from './glossary';
+export * from './analytics';
+export * from './campaigns';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -20,4 +31,30 @@ export const API_ROUTES = {
   pipelines: `/${API_PREFIX}/pipelines`,
   stages: `/${API_PREFIX}/stages`,
   deals: `/${API_PREFIX}/deals`,
+  // Milestone 3 — activity, reminders, notifications.
+  tasks: `/${API_PREFIX}/tasks`,
+  agenda: `/${API_PREFIX}/tasks/agenda`,
+  notifications: `/${API_PREFIX}/notifications`,
+  pushTokens: `/${API_PREFIX}/push-tokens`,
+  users: `/${API_PREFIX}/users`,
+  // Milestone 4 — dashboard + reporting (read-only aggregates).
+  dashboard: `/${API_PREFIX}/dashboard`,
+  // Milestone 5 — call management.
+  calls: `/${API_PREFIX}/calls`,
+  consents: `/${API_PREFIX}/consents`,
+  myoperatorWebhook: `/${API_PREFIX}/webhooks/myoperator`,
+  // M0 retrofit — integrations.
+  integrations: `/${API_PREFIX}/integrations`,
+  // M1 commerce — Shopify ingestion.
+  ingestion: `/${API_PREFIX}/ingestion`,
+  shopifyWebhook: `/${API_PREFIX}/webhooks/shopify`,
+  customersMerge: `/${API_PREFIX}/customers/merge`,
+  // M2 Customer 360.
+  customers: `/${API_PREFIX}/customers`,
+  // M3 analytics + segmentation.
+  analytics: `/${API_PREFIX}/analytics`,
+  segments: `/${API_PREFIX}/segments`,
+  // M4 abandoned-cart recovery.
+  campaigns: `/${API_PREFIX}/campaigns`,
+  resendWebhook: `/${API_PREFIX}/webhooks/resend`,
 } as const;

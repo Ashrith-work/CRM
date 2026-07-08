@@ -34,8 +34,6 @@ export default function NewLeadPage() {
           submitLabel="Create lead"
           onCancel={() => router.push('/dashboard/leads')}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: CreateLeadInput = {
               firstName: core.firstName ?? '',
               lastName: core.lastName ?? '',
@@ -46,7 +44,7 @@ export default function NewLeadPage() {
               customFields,
               tagIds,
             };
-            const created = await createLead(token, body);
+            const created = await createLead(getToken, body);
             router.push(`/dashboard/leads/${created.id}`);
           }}
         />

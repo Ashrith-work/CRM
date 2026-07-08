@@ -12,6 +12,8 @@ import { TagList } from '@/components/crm/TagPicker';
 import { NoteList } from '@/components/crm/NoteList';
 import { Timeline } from '@/components/crm/Timeline';
 import { DealsSection } from '@/components/crm/DealsSection';
+import { TasksSection } from '@/components/crm/TasksSection';
+import { CallsSection } from '@/components/crm/CallsSection';
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -26,9 +28,7 @@ export default function ContactDetailPage() {
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setState({ status: 'ready', contact: await getContact(token, id) });
+      setState({ status: 'ready', contact: await getContact(getToken, id) });
     } catch (err) {
       setState({ status: 'error', message: (err as Error).message });
     }
@@ -40,9 +40,7 @@ export default function ContactDetailPage() {
 
   const remove = async () => {
     if (!confirm('Delete this contact?')) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteContact(token, id);
+    await deleteContact(getToken, id);
     router.push('/dashboard/contacts');
   };
 
@@ -106,6 +104,10 @@ export default function ContactDetailPage() {
         </Card>
 
         <DealsSection contactId={id} />
+
+        <CallsSection contactId={id} contactPhone={c.phone} />
+
+        <TasksSection relatedType="CONTACT" relatedId={id} relatedLabel={`${c.firstName} ${c.lastName}`} />
 
         <Card title="Notes">
           <NoteList entityType="CONTACT" entityId={id} onAdded={() => setTimelineKey((k) => k + 1)} />

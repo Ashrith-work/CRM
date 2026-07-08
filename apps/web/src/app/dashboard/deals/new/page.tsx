@@ -21,12 +21,10 @@ function NewDealForm() {
 
   useEffect(() => {
     void (async () => {
-      const token = await getToken();
-      if (!token) return;
       const [p, c, co] = await Promise.all([
-        listPipelines(token),
-        listContacts(token, { limit: 100 }),
-        listCompanies(token, { limit: 100 }),
+        listPipelines(getToken),
+        listContacts(getToken, { limit: 100 }),
+        listCompanies(getToken, { limit: 100 }),
       ]);
       setPipelines(p.data);
       setContacts(c.data);
@@ -78,8 +76,6 @@ function NewDealForm() {
           submitLabel="Create deal"
           onCancel={() => router.push('/dashboard/deals')}
           onSubmit={async ({ core, customFields, tagIds }) => {
-            const token = await getToken();
-            if (!token) throw new Error('No session token available');
             const body: CreateDealInput = {
               name: core.name ?? '',
               pipelineId: core.pipelineId ?? defaultPipeline,
@@ -91,7 +87,7 @@ function NewDealForm() {
               customFields,
               tagIds,
             };
-            const created = await createDeal(token, body);
+            const created = await createDeal(getToken, body);
             router.push(`/dashboard/deals/${created.id}`);
           }}
         />

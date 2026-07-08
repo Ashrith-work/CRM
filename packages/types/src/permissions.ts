@@ -34,6 +34,44 @@ export const PERMISSIONS = {
   PIPELINE_MANAGE: 'pipeline:manage',
   DEAL_READ: 'deal:read',
   DEAL_MANAGE: 'deal:manage',
+
+  // Milestone 3 — activity tasks + reminders. Notifications/push tokens are
+  // per-user and gated by USER_READ (held by every role), not a dedicated key.
+  TASK_READ: 'task:read',
+  TASK_MANAGE: 'task:manage',
+
+  // Milestone 4 — dashboard/reporting. Three keys select the data scope:
+  //   read      → own metrics (rep)
+  //   read_team → team metrics + team table (manager)
+  //   read_all  → org-wide metrics (owner)
+  DASHBOARD_READ: 'dashboard:read',
+  DASHBOARD_READ_TEAM: 'dashboard:read_team',
+  DASHBOARD_READ_ALL: 'dashboard:read_all',
+
+  // Milestone 5 — call management + DPDP consent.
+  CALL_READ: 'call:read',
+  CALL_MANAGE: 'call:manage',
+  CONSENT_READ: 'consent:read',
+  CONSENT_MANAGE: 'consent:manage',
+
+  // M0 retrofit — third-party integrations (Configure).
+  INTEGRATION_READ: 'integration:read',
+  INTEGRATION_MANAGE: 'integration:manage',
+
+  // M1 commerce — Shopify ingestion + identity.
+  COMMERCE_READ: 'commerce:read',
+  COMMERCE_MANAGE: 'commerce:manage',
+  // M2 — unmasked PII (customer email/phone + unmasked exports). Admin/owner only.
+  PII_READ: 'pii:read',
+
+  // M3 — analytics (RFM) + segmentation.
+  ANALYTICS_READ: 'analytics:read',
+  SEGMENT_READ: 'segment:read',
+  SEGMENT_MANAGE: 'segment:manage',
+
+  // M4 — abandoned-cart recovery campaigns.
+  CAMPAIGN_READ: 'campaign:read',
+  CAMPAIGN_MANAGE: 'campaign:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -83,6 +121,31 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.PIPELINE_MANAGE,
     PERMISSIONS.DEAL_READ,
     PERMISSIONS.DEAL_MANAGE,
+    PERMISSIONS.TASK_READ,
+    PERMISSIONS.TASK_MANAGE,
+    // Admin acts as a team manager for dashboards (team-scoped + team table).
+    PERMISSIONS.DASHBOARD_READ,
+    PERMISSIONS.DASHBOARD_READ_TEAM,
+    // Call management + consent.
+    PERMISSIONS.CALL_READ,
+    PERMISSIONS.CALL_MANAGE,
+    PERMISSIONS.CONSENT_READ,
+    PERMISSIONS.CONSENT_MANAGE,
+    // Integrations (Configure) — admins connect/disconnect.
+    PERMISSIONS.INTEGRATION_READ,
+    PERMISSIONS.INTEGRATION_MANAGE,
+    // Commerce ingestion + identity merge (admin).
+    PERMISSIONS.COMMERCE_READ,
+    PERMISSIONS.COMMERCE_MANAGE,
+    // Admin sees unmasked PII + unmasked exports.
+    PERMISSIONS.PII_READ,
+    // Analytics + segmentation (admin builds/saves segments).
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.SEGMENT_READ,
+    PERMISSIONS.SEGMENT_MANAGE,
+    // Recovery campaigns (admin manages; everyone can read below).
+    PERMISSIONS.CAMPAIGN_READ,
+    PERMISSIONS.CAMPAIGN_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -98,5 +161,24 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.ACTIVITY_READ,
     PERMISSIONS.PIPELINE_READ,
     PERMISSIONS.DEAL_READ,
+    // Reps manage their own activity tasks + follow-ups.
+    PERMISSIONS.TASK_READ,
+    PERMISSIONS.TASK_MANAGE,
+    // Reps see only their own dashboard metrics (own-scope).
+    PERMISSIONS.DASHBOARD_READ,
+    // Reps place/log calls and capture recording consent.
+    PERMISSIONS.CALL_READ,
+    PERMISSIONS.CALL_MANAGE,
+    PERMISSIONS.CONSENT_READ,
+    PERMISSIONS.CONSENT_MANAGE,
+    // Reps can VIEW integrations but not connect/disconnect (proves the 403 path).
+    PERMISSIONS.INTEGRATION_READ,
+    // Reps can view Customer 360 + export, but PII is MASKED (no pii:read).
+    PERMISSIONS.COMMERCE_READ,
+    // Reps can view analytics + segments, but not create/edit segments.
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.SEGMENT_READ,
+    // Reps can view campaigns + recovery stats.
+    PERMISSIONS.CAMPAIGN_READ,
   ],
 };

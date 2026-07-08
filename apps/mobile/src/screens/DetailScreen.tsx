@@ -5,10 +5,12 @@ import type { EntityType, LeadStatus } from '@crm/types';
 import { LEAD_STATUSES } from '@crm/types';
 import { Card, colors, ErrorBox, Loading, Pill, PrimaryButton, Row, SecondaryButton } from '../ui';
 import { useAuthedLoad } from '../useAuthedLoad';
-import { getCompany, getContact, getLead, convertLead, updateLeadStatus } from '../api';
+import { getCompany, getContact, getLead, convertLead, updateLeadStatus, type TokenGetter } from '../api';
 import { ScreenHeader } from './ScreenHeader';
 import { NotesSection, Timeline } from './EntityFeed';
 import { STATUS_COLOR } from './EntityList';
+import { FollowUpsCard } from './FollowUpsCard';
+import { CallsCard } from './CallsCard';
 
 function useRefresh(): [number, () => void] {
   const [n, setN] = useState(0);
@@ -83,6 +85,8 @@ function ContactDetail({ id }: { id: string }): React.JSX.Element {
       </Card>
       <Tags tags={c.tags} />
       <CustomFields values={c.customFields} />
+      <CallsCard contactId={id} contactName={`${c.firstName} ${c.lastName}`} contactPhone={c.phone} />
+      <FollowUpsCard relatedType="CONTACT" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="CONTACT" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="CONTACT" entityId={id} refreshToken={refreshToken} />
     </Frame>
@@ -108,6 +112,7 @@ function CompanyDetail({ id }: { id: string }): React.JSX.Element {
       </Card>
       <Tags tags={c.tags} />
       <CustomFields values={c.customFields} />
+      <FollowUpsCard relatedType="COMPANY" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="COMPANY" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="COMPANY" entityId={id} refreshToken={refreshToken} />
     </Frame>
@@ -121,13 +126,11 @@ function LeadDetail({ id }: { id: string }): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const run = async (fn: (token: string) => Promise<unknown>) => {
+  const run = async (fn: (getToken: TokenGetter) => Promise<unknown>) => {
     setBusy(true);
     setActionError(null);
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token');
-      await fn(token);
+      await fn(getToken);
       await reload();
       bump();
     } catch (err) {
@@ -191,6 +194,7 @@ function LeadDetail({ id }: { id: string }): React.JSX.Element {
       {actionError ? <ErrorBox message={actionError} /> : null}
       <Tags tags={l.tags} />
       <CustomFields values={l.customFields} />
+      <FollowUpsCard relatedType="LEAD" relatedId={id} refreshToken={refreshToken} />
       <NotesSection entityType="LEAD" entityId={id} refreshToken={refreshToken} onChanged={bump} />
       <Timeline entityType="LEAD" entityId={id} refreshToken={refreshToken} />
     </Frame>

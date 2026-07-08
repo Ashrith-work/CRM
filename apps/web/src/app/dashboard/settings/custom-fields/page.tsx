@@ -33,9 +33,7 @@ export default function CustomFieldsAdminPage() {
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setDefs((await listCustomFields(token, entityType)).data);
+      setDefs((await listCustomFields(getToken, entityType)).data);
       setStatus('ready');
     } catch (err) {
       setError((err as Error).message);
@@ -51,8 +49,6 @@ export default function CustomFieldsAdminPage() {
     setBusy(true);
     setFormError('');
     try {
-      const token = await getToken();
-      if (!token) return;
       const body: CreateCustomFieldInput = {
         entityType,
         key: key.trim(),
@@ -64,7 +60,7 @@ export default function CustomFieldsAdminPage() {
           ? { options: options.split(',').map((o) => o.trim()).filter(Boolean) }
           : {}),
       };
-      await createCustomField(token, body);
+      await createCustomField(getToken, body);
       setKey('');
       setLabel('');
       setOptions('');
@@ -80,9 +76,7 @@ export default function CustomFieldsAdminPage() {
 
   const remove = async (id: string) => {
     if (!confirm('Delete this custom field?')) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteCustomField(token, id);
+    await deleteCustomField(getToken, id);
     await load();
   };
 

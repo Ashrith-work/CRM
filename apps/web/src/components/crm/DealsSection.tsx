@@ -21,9 +21,7 @@ export function DealsSection({ contactId, companyId }: { contactId?: string; com
 
   const load = useCallback(async () => {
     try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await listDeals(token, { contactId, companyId, limit: 100 });
+      const res = await listDeals(getToken, { contactId, companyId, limit: 100 });
       setDeals(res.data);
     } catch (err) {
       setError((err as Error).message);

@@ -27,9 +27,7 @@ export default function DealsBoardPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const token = await getToken();
-        if (!token) throw new Error('No session token available');
-        const res = await listPipelines(token);
+        const res = await listPipelines(getToken);
         setPipelines(res.data.map((p) => ({ id: p.id, name: p.name })));
         const preferred = res.data.find((p) => p.isDefault) ?? res.data[0];
         if (preferred) setPipelineId(preferred.id);
@@ -48,9 +46,7 @@ export default function DealsBoardPage() {
     if (!pipelineId) return;
     setStatus('loading');
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      setBoard(await getBoard(token, pipelineId));
+      setBoard(await getBoard(getToken, pipelineId));
       setStatus('ready');
     } catch (err) {
       setMessage((err as Error).message);
@@ -82,9 +78,7 @@ export default function DealsBoardPage() {
     setBoard(optimistic);
 
     try {
-      const token = await getToken();
-      if (!token) throw new Error('No session token available');
-      await moveDeal(token, dealId, toStageId);
+      await moveDeal(getToken, dealId, toStageId);
       await loadBoard(); // reconcile with authoritative totals/status
     } catch (err) {
       setBoard(snapshot); // roll back
@@ -94,9 +88,7 @@ export default function DealsBoardPage() {
 
   const loadMore = async (col: BoardColumn) => {
     if (!board || !col.nextCursor) return;
-    const token = await getToken();
-    if (!token) return;
-    const page = await listDeals(token, { pipelineId, stageId: col.stage.id, cursor: col.nextCursor });
+    const page = await listDeals(getToken, { pipelineId, stageId: col.stage.id, cursor: col.nextCursor });
     setBoard({
       ...board,
       columns: board.columns.map((c) =>

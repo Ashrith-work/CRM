@@ -18,9 +18,7 @@ export function CustomFieldView({
   const [defs, setDefs] = useState<CustomFieldDefinition[]>([]);
 
   const load = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
-    const res = await listCustomFields(token, entityType);
+    const res = await listCustomFields(getToken, entityType);
     setDefs(res.data);
   }, [getToken, entityType]);
 

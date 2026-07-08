@@ -3,11 +3,12 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from './public.decorator';
-import { ClerkService } from './clerk.service';
+import { ClerkService, TokenVerificationFailure } from './clerk.service';
 import { UserContextService } from './user-context.service';
 import type { AuthenticatedRequest } from './auth.types';
 
@@ -22,6 +23,8 @@ import type { AuthenticatedRequest } from './auth.types';
  */
 @Injectable()
 export class ClerkAuthGuard implements CanActivate {
+  private readonly logger = new Logger(ClerkAuthGuard.name);
+
   constructor(
     private readonly reflector: Reflector,
     private readonly clerk: ClerkService,
@@ -38,16 +41,22 @@ export class ClerkAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const token = this.extractToken(request);
     if (!token) {
+      // Precise reason in logs; generic message to the client.
+      this.logger.warn(`401 missing: no bearer token on ${request.method} ${request.url}`);
       throw new UnauthorizedException('Missing bearer token');
     }
 
     let claims;
     try {
       claims = await this.clerk.verifyToken(token);
-    } catch {
+    } catch (err) {
+      const reason = err instanceof TokenVerificationFailure ? err.reason : 'invalid';
+      this.logger.warn(`401 ${reason}: ${(err as Error).message} on ${request.method} ${request.url}`);
+      // A 401 tells the client to refresh the token (getToken skipCache) + retry.
       throw new UnauthorizedException('Invalid or expired token');
     }
     if (!claims?.sub) {
+      this.logger.warn(`401 invalid: token has no sub claim on ${request.method} ${request.url}`);
       throw new UnauthorizedException('Invalid token claims');
     }
 

@@ -1,0 +1,23 @@
+import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { CustomersModule } from '../customers/customers.module';
+import { ShopifyService } from './shopify.service';
+import { CommerceIngestService } from './commerce-ingest.service';
+import { IngestionService } from './ingestion.service';
+import { IngestionController } from './ingestion.controller';
+import { ShopifyWebhookController } from './shopify-webhook.controller';
+import { SyncProcessor } from './sync.processor';
+import { SHOPIFY_SYNC_QUEUE } from './commerce.constants';
+
+/**
+ * Shopify ingestion: connection + webhook + the BullMQ sync worker (backfill /
+ * reconcile / webhook). Depends on CustomersModule (IdentityService) for the
+ * shared upsert path.
+ */
+@Module({
+  imports: [CustomersModule, BullModule.registerQueue({ name: SHOPIFY_SYNC_QUEUE })],
+  controllers: [IngestionController, ShopifyWebhookController],
+  providers: [ShopifyService, CommerceIngestService, IngestionService, SyncProcessor],
+  exports: [IngestionService],
+})
+export class IngestionModule {}

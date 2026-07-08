@@ -18,6 +18,19 @@ import { LeadsModule } from './leads/leads.module';
 import { StagesModule } from './stages/stages.module';
 import { PipelinesModule } from './pipelines/pipelines.module';
 import { DealsModule } from './deals/deals.module';
+import { PushTokensModule } from './push-tokens/push-tokens.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { TasksModule } from './tasks/tasks.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { TelephonyModule } from './telephony/telephony.module';
+import { ConsentsModule } from './consents/consents.module';
+import { RecordingsModule } from './recordings/recordings.module';
+import { CallsModule } from './calls/calls.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { CustomersModule } from './customers/customers.module';
+import { IngestionModule } from './ingestion/ingestion.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -48,6 +61,28 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     StagesModule,
     PipelinesModule,
     DealsModule,
+    // Milestone 3 — activity, reminders, notifications. PushTokens/Notifications
+    // register before Tasks (the reminder send worker depends on them).
+    PushTokensModule,
+    NotificationsModule,
+    TasksModule,
+    // Milestone 4 — read-only dashboard/reporting over M1–M3 data.
+    DashboardModule,
+    // Milestone 5 — call management. Telephony is global; Consents/Recordings
+    // register before Calls (dependency order).
+    TelephonyModule,
+    ConsentsModule,
+    RecordingsModule,
+    CallsModule,
+    // M0 retrofit — integrations directory (Configure).
+    IntegrationsModule,
+    // M1 commerce — Shopify ingestion (customers/identity + ingestion worker).
+    CustomersModule,
+    IngestionModule,
+    // M3 — RFM analytics (materialized view + nightly worker) + segmentation.
+    AnalyticsModule,
+    // M4 — abandoned-cart recovery (the closed loop / MVP ship line).
+    CampaignsModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

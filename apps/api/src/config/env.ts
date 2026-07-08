@@ -15,6 +15,76 @@ const envSchema = z.object({
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_JWT_KEY: z.string().optional(),
   CLERK_AUTHORIZED_PARTIES: z.string().optional(),
+  /** Clock-skew tolerance (ms) for JWT exp/nbf checks, so minor drift between
+   * the client, Clerk, and this server does not reject otherwise-valid tokens. */
+  CLERK_CLOCK_SKEW_MS: z.coerce.number().int().min(0).default(5_000),
+
+  // Milestone 3 — reminders + notifications.
+  /** How often the reminder sweep runs (ms). */
+  REMINDER_SWEEP_INTERVAL_MS: z.coerce.number().int().min(1000).default(60_000),
+  /** Max concurrent send jobs (throttles a storm of simultaneous reminders). */
+  REMINDER_SEND_CONCURRENCY: z.coerce.number().int().min(1).default(10),
+  /** From address for reminder/notification emails. */
+  EMAIL_FROM: z.string().default('CRM <no-reply@crm.local>'),
+  /** If set, emails are sent via the Resend HTTP API; otherwise logged. */
+  RESEND_API_KEY: z.string().optional(),
+  /** Optional Expo access token for authenticated push (recommended in prod). */
+  EXPO_ACCESS_TOKEN: z.string().optional(),
+
+  // Milestone 5 — telephony (MyOperator) + recording storage (Cloudinary).
+  MYOPERATOR_API_URL: z.string().default('https://obd-api.myoperator.co'),
+  /** When unset, the adapter runs in MOCK mode (generates ids; no real dialing). */
+  MYOPERATOR_API_TOKEN: z.string().optional(),
+  MYOPERATOR_COMPANY_ID: z.string().optional(),
+  /** The org's caller-id / DID used as the "from" leg of a click-to-call. */
+  MYOPERATOR_CALLER_ID: z.string().optional(),
+  /** Shared secret for HMAC-SHA256 webhook verification. When set, bad
+   * signatures are rejected; when unset (dev), webhooks are allowed with a warn. */
+  MYOPERATOR_WEBHOOK_SECRET: z.string().optional(),
+
+  /** Cloudinary — either CLOUDINARY_URL or the three discrete vars. Unset → MOCK. */
+  CLOUDINARY_URL: z.string().optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_FOLDER: z.string().default('crm/recordings'),
+  /** Max recording size to fetch/store (bytes). Default 50 MB. */
+  RECORDING_MAX_BYTES: z.coerce.number().int().min(1).default(50 * 1024 * 1024),
+  /** TTL (seconds) for the signed recording playback URL. */
+  RECORDING_URL_TTL_SECONDS: z.coerce.number().int().min(30).default(300),
+
+  // Milestone 1 (commerce) — Shopify ingestion.
+  /** Pinned Admin API version. */
+  SHOPIFY_API_VERSION: z.string().default('2024-10'),
+  SHOPIFY_API_KEY: z.string().optional(),
+  /** App API secret — used for webhook HMAC (falls back if no webhook secret). */
+  SHOPIFY_API_SECRET: z.string().optional(),
+  /** Webhook signing secret (preferred for HMAC when present). */
+  SHOPIFY_WEBHOOK_SECRET: z.string().optional(),
+  /** Admin API access token. Unset ⇒ the connector reports not_connected. */
+  SHOPIFY_ADMIN_ACCESS_TOKEN: z.string().optional(),
+  /** e.g. "nerige.myshopify.com". */
+  SHOPIFY_SHOP_DOMAIN: z.string().optional(),
+  /** Nightly reconciliation cadence (ms). Default 24h. */
+  RECONCILE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
+
+  // Milestone 3 — RFM analytics.
+  /** Nightly RFM refresh cadence (ms). Default 24h. */
+  RFM_REFRESH_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
+
+  // Milestone 4 — abandoned-cart recovery.
+  /** A cart is "abandoned" after this many minutes without conversion. */
+  ABANDONED_CART_THRESHOLD_MINUTES: z.coerce.number().int().min(1).default(60),
+  /** Enrollment sweep cadence (ms). Default 5 min. */
+  CAMPAIGN_ENROLL_INTERVAL_MS: z.coerce.number().int().min(10_000).default(5 * 60 * 1000),
+  /** Send sweep cadence (ms). Default 2 min. */
+  CAMPAIGN_SEND_INTERVAL_MS: z.coerce.number().int().min(10_000).default(2 * 60 * 1000),
+  /** Base URL used to build the (signed) unsubscribe link in emails. */
+  APP_BASE_URL: z.string().default('http://localhost:4000'),
+  /** HMAC key for signing unsubscribe links. */
+  UNSUBSCRIBE_SECRET: z.string().default('dev-unsubscribe-secret'),
+  /** When set, Resend webhooks must carry a matching HMAC (else dev-lenient). */
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

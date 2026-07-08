@@ -1,7 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { ThemeProvider } from '@/components/ThemeProvider';
 import './globals.css';
+
+// Applies the persisted (or system) theme before first paint — no flash.
+const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: 'CRM',
@@ -23,10 +27,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
+        <head>
+          <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        </head>
         <body>
-          {children}
-          <ServiceWorkerRegister />
+          <ThemeProvider>
+            {children}
+            <ServiceWorkerRegister />
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

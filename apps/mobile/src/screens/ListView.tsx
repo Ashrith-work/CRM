@@ -13,7 +13,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { colors, ErrorBox, Pill } from '../ui';
 import { useNav, type Screen } from '../navigation';
 import { ScreenHeader } from './ScreenHeader';
-import type { ListParams } from '../api';
+import type { ListParams, TokenGetter } from '../api';
 
 export interface RowContent {
   primary: string;
@@ -31,7 +31,7 @@ export function ListView<T extends { id: string }>({
 }: {
   title: string;
   addScreen?: Screen;
-  fetchPage: (token: string, params: ListParams) => Promise<{ data: T[]; nextCursor: string | null }>;
+  fetchPage: (getToken: TokenGetter, params: ListParams) => Promise<{ data: T[]; nextCursor: string | null }>;
   renderRow: (item: T) => RowContent;
   onOpen: (item: T) => void;
 }): React.JSX.Element {
@@ -50,9 +50,7 @@ export function ListView<T extends { id: string }>({
       else setLoading(true);
       setError(null);
       try {
-        const token = await getToken();
-        if (!token) throw new Error('No session token');
-        const page = await fetchPage(token, {
+        const page = await fetchPage(getToken, {
           search: opts.term ?? search,
           cursor: opts.append ? (opts.nextCursor ?? undefined) : undefined,
           limit: 25,
