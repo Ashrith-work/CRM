@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { PERMISSIONS, ROLE_PERMISSIONS, SYSTEM_ROLES } from '@crm/types';
 import { MeController } from '../src/users/me.controller';
+import { UsersService } from '../src/users/users.service';
 import { AuditController } from '../src/audit/audit.controller';
 import { ClerkAuthGuard } from '../src/auth/clerk-auth.guard';
 import { ClerkService } from '../src/auth/clerk.service';
@@ -54,6 +55,7 @@ describe('Auth + RBAC (e2e smoke)', () => {
         { provide: ClerkService, useValue: clerkStub },
         { provide: UserContextService, useValue: userCtxStub },
         { provide: PrismaService, useValue: prismaStub },
+        { provide: UsersService, useValue: { setTimezone: jest.fn().mockResolvedValue('UTC') } },
       ],
     }).compile();
 
