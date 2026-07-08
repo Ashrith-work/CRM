@@ -67,6 +67,10 @@ const envSchema = z.object({
   SHOPIFY_SHOP_DOMAIN: z.string().optional(),
   /** Nightly reconciliation cadence (ms). Default 24h. */
   RECONCILE_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
+
+  // Milestone 3 — RFM analytics.
+  /** Nightly RFM refresh cadence (ms). Default 24h. */
+  RFM_REFRESH_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
 });
 
 export type Env = z.infer<typeof envSchema>;

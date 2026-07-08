@@ -29,6 +29,7 @@ import { CallsModule } from './calls/calls.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { CustomersModule } from './customers/customers.module';
 import { IngestionModule } from './ingestion/ingestion.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -77,6 +78,8 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     // M1 commerce — Shopify ingestion (customers/identity + ingestion worker).
     CustomersModule,
     IngestionModule,
+    // M3 — RFM analytics (materialized view + nightly worker) + segmentation.
+    AnalyticsModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

@@ -65,7 +65,11 @@ export class Customer360Service {
         lastOrderAt: features?.lastOrderAt ? features.lastOrderAt.toISOString() : null,
         currency: features?.currency ?? null,
         badges: {
-          rfm: features?.rfmScore ?? null,
+          rfm: features?.rSegment ?? null,
+          rScore: features?.rScore ?? null,
+          fScore: features?.fScore ?? null,
+          mScore: features?.mScore ?? null,
+          daysSinceLast: features?.daysSinceLast ?? null,
           clv: features?.clvMinor ?? null,
           churnRisk: features?.churnRisk ?? null,
           apparelSize: features?.apparelSize ?? null,

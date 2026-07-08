@@ -73,6 +73,10 @@ model Organization {
   customerFeatures   CustomerFeatures[]
   experienceExports  ExperienceExport[]
 
+  // M3 — segmentation.
+  segments           Segment[]
+  segmentMemberships SegmentMembership[]
+
   @@index([slug])
 }
 
@@ -334,8 +338,15 @@ model CustomerFeatures {
   lastOrderAt        DateTime?
   avgOrderValueMinor Int      @default(0)
   currency           String?
-  // Placeholders — populated by M3 analytics.
-  rfmScore      String?
+  // RFM (written by the nightly refresh worker from the customer_rfm view).
+  rScore        Int?
+  fScore        Int?
+  mScore        Int?
+  /** Deterministic RFM segment label (e.g. "Champions", "At Risk"). */
+  rSegment      String?
+  rfmScore      String? // "R5 F4 M3" combined code (kept for display)
+  daysSinceLast Int?
+  // Placeholders — populated later (Phase 2).
   clvMinor      Int?
   churnRisk     Float?
   apparelSize   String?
@@ -349,6 +360,7 @@ model CustomerFeatures {
   @@unique([organizationId, customerId])
   @@index([organizationId, netRevenueMinor])
   @@index([organizationId, lastOrderAt])
+  @@index([organizationId, rSegment])
 }
 
 model ExperienceExport {
@@ -362,6 +374,54 @@ model ExperienceExport {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
+}
+
+// ============================================================================
+// Milestone 3 — segmentation. A Segment stores a JSON rule tree translated into
+// a SAFE parameterized query over CustomerFeatures. STATIC snapshots membership
+// at save; DYNAMIC recomputes it on a schedule. customer_rfm is a raw SQL
+// MATERIALIZED VIEW (see the migration) — not modeled here.
+// ============================================================================
+
+enum SegmentType {
+  STATIC
+  DYNAMIC
+}
+
+model Segment {
+  id              String      @id @default(cuid())
+  organizationId  String
+  name            String
+  description     String?
+  /** JSON rule tree: { op: AND|OR, rules: [ {field,op,value} | nested ] }. */
+  rules           Json
+  type            SegmentType @default(STATIC)
+  refreshCron     String?
+  createdById     String
+  memberCount     Int         @default(0)
+  lastRefreshedAt DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      SegmentMembership[]
+
+  @@index([organizationId, deletedAt])
+}
+
+model SegmentMembership {
+  id             String   @id @default(cuid())
+  organizationId String
+  segmentId      String
+  customerId     String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  segment      Segment      @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+
+  @@unique([segmentId, customerId])
+  @@index([organizationId, segmentId])
 }
 
 model User {

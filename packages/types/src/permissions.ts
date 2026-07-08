@@ -63,6 +63,11 @@ export const PERMISSIONS = {
   COMMERCE_MANAGE: 'commerce:manage',
   // M2 — unmasked PII (customer email/phone + unmasked exports). Admin/owner only.
   PII_READ: 'pii:read',
+
+  // M3 — analytics (RFM) + segmentation.
+  ANALYTICS_READ: 'analytics:read',
+  SEGMENT_READ: 'segment:read',
+  SEGMENT_MANAGE: 'segment:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -130,6 +135,10 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.COMMERCE_MANAGE,
     // Admin sees unmasked PII + unmasked exports.
     PERMISSIONS.PII_READ,
+    // Analytics + segmentation (admin builds/saves segments).
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.SEGMENT_READ,
+    PERMISSIONS.SEGMENT_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -159,5 +168,8 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.INTEGRATION_READ,
     // Reps can view Customer 360 + export, but PII is MASKED (no pii:read).
     PERMISSIONS.COMMERCE_READ,
+    // Reps can view analytics + segments, but not create/edit segments.
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.SEGMENT_READ,
   ],
 };

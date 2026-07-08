@@ -11,9 +11,14 @@ import { ConsentStatusSchema } from './calls';
 // Metric badges (placeholders until M3) + identity.
 // ---------------------------------------------------------------------------
 export const CustomerBadgesSchema = z.object({
+  /** RFM segment label (e.g. "Champions"); real from M3. */
   rfm: z.string().nullable(),
-  clv: z.number().int().nullable(), // minor units
-  churnRisk: z.number().nullable(),
+  rScore: z.number().int().nullable(),
+  fScore: z.number().int().nullable(),
+  mScore: z.number().int().nullable(),
+  daysSinceLast: z.number().int().nullable(),
+  clv: z.number().int().nullable(), // minor units (stub)
+  churnRisk: z.number().nullable(), // stub
   apparelSize: z.string().nullable(),
   fit: z.string().nullable(),
   styleAffinity: z.string().nullable(),

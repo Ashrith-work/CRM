@@ -139,10 +139,11 @@ export class CommerceIngestService {
     });
   }
 
-  /** Recompute the denormalized per-customer aggregates (net of refunds). */
+  /** Recompute the denormalized per-customer aggregates. Only paid/fulfilled
+   * orders count (matches the RFM view + glossary); refunds subtract. */
   async recomputeFeatures(organizationId: string, customerId: string): Promise<void> {
     const agg = await this.prisma.order.aggregate({
-      where: { organizationId, customerId, deletedAt: null },
+      where: { organizationId, customerId, deletedAt: null, status: { in: ['PAID', 'FULFILLED'] } },
       _count: { _all: true },
       _sum: { totalMinor: true, refundedMinor: true },
       _min: { placedAt: true },
@@ -151,7 +152,7 @@ export class CommerceIngestService {
     const orderCount = agg._count._all;
     const netRevenueMinor = (agg._sum.totalMinor ?? 0) - (agg._sum.refundedMinor ?? 0);
     const latest = await this.prisma.order.findFirst({
-      where: { organizationId, customerId, deletedAt: null },
+      where: { organizationId, customerId, deletedAt: null, status: { in: ['PAID', 'FULFILLED'] } },
       orderBy: { placedAt: 'desc' },
       select: { currency: true },
     });

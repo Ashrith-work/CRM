@@ -11,6 +11,7 @@ export * from './integrations';
 export * from './commerce';
 export * from './customer360';
 export * from './glossary';
+export * from './analytics';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -49,4 +50,7 @@ export const API_ROUTES = {
   customersMerge: `/${API_PREFIX}/customers/merge`,
   // M2 Customer 360.
   customers: `/${API_PREFIX}/customers`,
+  // M3 analytics + segmentation.
+  analytics: `/${API_PREFIX}/analytics`,
+  segments: `/${API_PREFIX}/segments`,
 } as const;

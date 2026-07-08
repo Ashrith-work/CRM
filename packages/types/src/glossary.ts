@@ -6,7 +6,10 @@
  * shape + resolver are introduced here.
  */
 
-export const GLOSSARY_VERSION = 1;
+export const GLOSSARY_VERSION = 2;
+
+/** Definition-sync date for the metrics wired to real data (M3). */
+const SYNCED = '2026-07-08';
 
 export interface GlossaryEntry {
   metricKey: string;
@@ -25,50 +28,72 @@ export const GLOSSARY_REGISTRY: Record<string, GlossaryEntry> = {
   net_revenue: {
     metricKey: 'net_revenue',
     plainLanguage: 'Total money this customer has paid you, after refunds.',
-    formula: 'Σ(order.totalMinor − order.refundedMinor) across all orders',
+    formula: 'Σ(order.totalMinor − order.refundedMinor) over paid/fulfilled orders',
     dataWindow: 'lifetime',
-    lastSynced: null,
+    lastSynced: SYNCED,
   },
   order_count: {
     metricKey: 'order_count',
     plainLanguage: 'How many orders this customer has placed.',
-    formula: 'count(orders)',
+    formula: 'count(paid/fulfilled orders)',
     dataWindow: 'lifetime',
-    lastSynced: null,
+    lastSynced: SYNCED,
   },
   avg_order_value: {
     metricKey: 'avg_order_value',
     plainLanguage: 'Average net value of an order for this customer.',
     formula: 'net_revenue ÷ order_count',
     dataWindow: 'lifetime',
-    lastSynced: null,
+    lastSynced: SYNCED,
   },
   last_order: {
     metricKey: 'last_order',
     plainLanguage: 'When this customer most recently ordered.',
-    formula: 'max(order.placedAt)',
+    formula: 'max(order.placedAt) over paid/fulfilled orders',
     dataWindow: 'lifetime',
-    lastSynced: null,
+    lastSynced: SYNCED,
   },
-  // Placeholders — populated by M3 analytics (badges show "—" until then).
+  // RFM — real (nightly materialized view + refresh worker).
   rfm: {
     metricKey: 'rfm',
-    plainLanguage: 'Recency/Frequency/Monetary segment — how recently, how often, and how much this customer buys.',
-    formula: 'quintile(recency) · quintile(frequency) · quintile(monetary)',
-    dataWindow: 'lifetime',
+    plainLanguage: 'Recency/Frequency/Monetary segment — how recently, how often, and how much a customer buys, as a named segment (e.g. Champions, At Risk).',
+    formula: 'NTILE(5) quintiles of recency (recent=5), frequency, and monetary; mapped to a segment by a fixed matrix',
+    dataWindow: 'lifetime (nightly refresh)',
+    lastSynced: SYNCED,
+  },
+  recovery_rate: {
+    metricKey: 'recovery_rate',
+    plainLanguage: 'Share of abandoned checkouts later converted to an order.',
+    formula: 'converted_carts ÷ abandoned_carts — enabled with abandoned-cart recovery (M4)',
+    dataWindow: 'period',
     lastSynced: null,
   },
+  // Stubs — Phase 2.
   clv: {
     metricKey: 'clv',
     plainLanguage: 'Predicted lifetime value — expected total net revenue from this customer.',
-    formula: 'model(order history) — computed in M3',
+    formula: 'model(order history) — stub in this phase',
     dataWindow: 'predicted',
     lastSynced: null,
   },
   churn_risk: {
     metricKey: 'churn_risk',
     plainLanguage: 'Likelihood this customer has stopped buying.',
-    formula: 'model(recency, cadence) — computed in M3',
+    formula: 'model(recency, cadence) — stub in this phase',
+    dataWindow: 'predicted',
+    lastSynced: null,
+  },
+  cohort: {
+    metricKey: 'cohort',
+    plainLanguage: 'Customers grouped by the month of their first order, to compare retention over time.',
+    formula: 'group by month(first_order) — stub in this phase',
+    dataWindow: 'lifetime',
+    lastSynced: null,
+  },
+  ltv_cac: {
+    metricKey: 'ltv_cac',
+    plainLanguage: 'Lifetime value relative to what it costs to acquire a customer.',
+    formula: 'clv ÷ acquisition_cost — stub in this phase',
     dataWindow: 'predicted',
     lastSynced: null,
   },

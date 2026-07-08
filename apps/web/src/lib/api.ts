@@ -146,6 +146,20 @@ import {
   type ExportAsyncResponse,
   type ExportStatusResponse,
 } from '@crm/types';
+import {
+  AnalyticsSummarySchema,
+  SegmentSchema,
+  SegmentListResponseSchema,
+  SegmentMembersResponseSchema,
+  SegmentPreviewResponseSchema,
+  type AnalyticsSummary,
+  type RuleGroup,
+  type SaveSegmentInput,
+  type Segment,
+  type SegmentListResponse,
+  type SegmentMembersResponse,
+  type SegmentPreviewResponse,
+} from '@crm/types';
 import { z, type ZodType } from 'zod';
 
 const StageArrayResponseSchema = z.object({ data: z.array(StageSchema) });
@@ -685,4 +699,38 @@ export function getExportStatus(getToken: TokenGetter, jobId: string): Promise<E
 }
 export function downloadExport(getToken: TokenGetter, jobId: string): Promise<Blob> {
   return requestBlob(getToken, `${API_ROUTES.customers}/exports/${jobId}/download`);
+}
+
+// --- Analytics + segmentation (M3) ------------------------------------------
+export function getAnalyticsSummary(getToken: TokenGetter): Promise<AnalyticsSummary> {
+  return request(getToken, `${API_ROUTES.analytics}/summary`, AnalyticsSummarySchema);
+}
+export function refreshAnalytics(getToken: TokenGetter): Promise<{ refreshed: number }> {
+  return request(getToken, `${API_ROUTES.analytics}/refresh`, z.object({ refreshed: z.number() }), { method: 'POST' });
+}
+
+export function previewSegment(getToken: TokenGetter, rules: RuleGroup): Promise<SegmentPreviewResponse> {
+  return request(getToken, `${API_ROUTES.segments}/preview`, SegmentPreviewResponseSchema, {
+    method: 'POST',
+    body: JSON.stringify({ rules }),
+  });
+}
+export function saveSegment(getToken: TokenGetter, body: SaveSegmentInput): Promise<Segment> {
+  return request(getToken, API_ROUTES.segments, SegmentSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function listSegments(getToken: TokenGetter): Promise<SegmentListResponse> {
+  return request(getToken, API_ROUTES.segments, SegmentListResponseSchema);
+}
+export function getSegment(getToken: TokenGetter, id: string): Promise<Segment> {
+  return request(getToken, `${API_ROUTES.segments}/${id}`, SegmentSchema);
+}
+export function getSegmentMembers(
+  getToken: TokenGetter,
+  id: string,
+  params: { cursor?: string; limit?: number } = {},
+): Promise<SegmentMembersResponse> {
+  return request(getToken, `${API_ROUTES.segments}/${id}/members${qs(params)}`, SegmentMembersResponseSchema);
+}
+export function refreshSegment(getToken: TokenGetter, id: string): Promise<Segment> {
+  return request(getToken, `${API_ROUTES.segments}/${id}/refresh`, SegmentSchema, { method: 'POST' });
 }

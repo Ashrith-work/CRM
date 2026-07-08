@@ -10,6 +10,7 @@ const NAV_GROUPS: Array<{ label: string; items: Array<{ href: string; label: str
     items: [
       { href: '/dashboard', label: 'Home' },
       { href: '/dashboard/sales', label: 'Sales' },
+      { href: '/dashboard/analytics', label: 'Analytics' },
     ],
   },
   {
@@ -18,6 +19,7 @@ const NAV_GROUPS: Array<{ label: string; items: Array<{ href: string; label: str
       { href: '/dashboard/contacts', label: 'Contacts' },
       { href: '/dashboard/companies', label: 'Companies' },
       { href: '/dashboard/customers', label: 'Customers' },
+      { href: '/dashboard/segments', label: 'Segments' },
       { href: '/dashboard/leads', label: 'Leads' },
       { href: '/dashboard/deals', label: 'Deals' },
       { href: '/dashboard/tasks', label: 'Tasks' },

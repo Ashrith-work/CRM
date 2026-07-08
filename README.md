@@ -1,4 +1,4 @@
-# CRM — M0 + M1 + M2 + M3 + M4 + M5 + Commerce (Shopify) + Customer 360
+# CRM — M0 + M1 + M2 + M3 + M4 + M5 + Commerce (Shopify) + Customer 360 + RFM Analytics
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -44,6 +44,13 @@ clients never duplicate it.
 > **P95 < 300ms on 100k customers** (measured 1–14ms at the query layer). (The
 > user's "M2"; labeled *Customer 360* to avoid colliding with the repo's M2 =
 > Revenue.)
+> **RFM Analytics:** basic RFM computed in a **materialized view** (`customer_rfm`,
+> refreshed nightly), written into `CustomerFeatures` with a deterministic segment
+> label; a **golden-dataset test** matches hand-computed values exactly (incl. a
+> refund + single-order case); the glossary gains analytics definitions; and a
+> **JSON rule-tree segment builder** targets a campaign audience (safe
+> parameterized queries, static snapshot / dynamic refresh). (The user's "M3";
+> labeled *RFM Analytics* to avoid colliding with the repo's M3 = Activity.)
 > **Milestone 5:** call management — **MyOperator** telephony (click-to-call +
 > inbound/outbound webhooks) logging every call to the matched contact's
 > timeline, with recordings stored in **Cloudinary** and playable ONLY with
@@ -135,7 +142,9 @@ content on both clients. It **wipes the seeded tables first**, then inserts:
   webhooks resolve to it.
 - A connected **Shopify** integration + ~20 commerce customers, 8 products, and
   40 orders (money in **paise**, mixed paid/partially-refunded/refunded/pending)
-  so the Settings panel shows real CRM order counts.
+  so the Settings panel shows real CRM order counts. **RFM segments** for these
+  customers populate on the first refresh (~10s after the API boots, or `POST
+  /analytics/refresh`). Set `SEED_COMMERCE_CUSTOMERS=100000` for the 100k perf run.
 
 ```bash
 pnpm db:seed                 # SMALL (fast local demo) — the default
@@ -269,6 +278,38 @@ and audit-logged. List endpoints are cursor-paginated and return
 | GET | `/api/v1/customers/:id/orders` | `commerce:read` | recent orders + range (`?limit=(0=all)&from=&to=&year=&month=`); net = total−refunded |
 | GET | `/api/v1/customers/:id/export` | `commerce:read` | sync **.xlsx** download (8 tabs); masked unless `pii:read`; writes ExperienceExport + AuditLog |
 | POST | `/api/v1/customers/:id/export/async` \| `/export/segment` | `commerce:read` / `commerce:manage` | async/batch export via the worker (JobStatus) |
+| GET | `/api/v1/analytics/summary` | `analytics:read` | RFM summary + segment distribution (reads the view-backed features) |
+| POST | `/api/v1/analytics/refresh` | `segment:manage` | force an RFM refresh for this org now |
+| POST | `/api/v1/segments/preview` | `segment:read` | `{count, sample:20}` for a rule tree (< 2s) |
+| POST | `/api/v1/segments` | `segment:manage` | save (static snapshot \| dynamic + refreshCron) |
+| GET | `/api/v1/segments` \| `/:id` \| `/:id/members` | `segment:read` | list / detail / members (masked per role) |
+| POST | `/api/v1/segments/:id/refresh` | `segment:manage` | recompute a dynamic segment's membership |
+
+### RFM analytics + segmentation
+
+- **Materialized view** — `customer_rfm` (raw SQL) computes, per customer,
+  `MAX(placedAt)` / `COUNT(*)` / `SUM(totalMinor − refundedMinor)` over
+  **paid+fulfilled** orders only, then `NTILE(5)` quintiles (recent = 5) with a
+  deterministic `customer_id` tiebreak. Endpoints **read** the view (via the
+  denormalized `CustomerFeatures`) — they never recompute inline.
+- **Refresh worker** (nightly, tiered: revenue on ingest, RFM nightly) — `REFRESH
+  MATERIALIZED VIEW CONCURRENTLY`, then writes `rScore/fScore/mScore` + a
+  deterministic **segment label** (`rfmSegment(r,f,m)` matrix: Champions, Loyal,
+  At Risk, …) + `daysSinceLast` into `CustomerFeatures`. Runs once ~10s after boot
+  so a fresh deploy is populated immediately. The **M2 profile badges now show
+  real RFM values**.
+- **Glossary** gains analytics defs (RFM real; CLV/churn/cohort/LTV:CAC stubs;
+  AOV/recovery) — every KPI's info tooltip resolves from the one registry.
+- **Segment engine** — a JSON rule tree `{op: AND|OR, rules: [{field,op,value} |
+  nested]}` is translated into a **SAFE parameterized Prisma `where`** over
+  CustomerFeatures: fields + ops are **whitelisted**, values coerced, never
+  string-concatenated or eval'd. **Static** segments snapshot membership at save;
+  **dynamic** ones are recomputed by the nightly job. A segment is reusable as a
+  campaign audience (M4 consumes it).
+- **Golden-dataset test** (`analytics/golden-dataset.spec.ts`) — hand-computed RFM
+  asserted **exactly** against the real view + worker, including the refund case
+  (monetary subtracts the refund), a single-order customer, mixed paid/fulfilled,
+  and a zero-order customer (excluded). Wrong numbers **fail**.
 
 ### Customer 360
 
@@ -523,6 +564,18 @@ New tables, all org-scoped with `UNIQUE(org, externalId)` and integer-minor mone
   size/fit/style); `UNIQUE(org, customerId)`
 - **ExperienceExport** — export audit (actor, customerId?, masked, createdAt)
 
+### Data model (RFM analytics + segments)
+
+- **customer_rfm** — raw SQL **materialized view** (not in the Prisma schema; see
+  the `..._m3_rfm_segments` migration), unique index on `customer_id` for
+  `REFRESH … CONCURRENTLY`
+- **CustomerFeatures** gains `rScore/fScore/mScore/rSegment/rfmScore/daysSinceLast`
+  (written by the refresh worker)
+- **Segment** — `rules` (JSON rule tree), `type` (STATIC|DYNAMIC), `refreshCron`,
+  `memberCount`, `lastRefreshedAt`
+- **SegmentMembership** — `UNIQUE(segmentId, customerId)`; snapshot for static,
+  recomputed for dynamic
+
 ## RBAC model
 
 Permissions and role→permission grants are defined once in
@@ -576,6 +629,10 @@ pnpm --filter @crm/api test        # unit: custom-field validation, activity emi
                                     #        custom/year-month, net + "Mon YYYY"), timeline ordering+type
                                     #        filter, Excel export content + masking + audit rows, glossary
                                     #        resolution; 100k read P95 (index scans 1–14ms)
+                                    #   RFM — GOLDEN DATASET (exact r/f/m/segment/net incl. refund +
+                                    #        single-order + zero-order + daysSinceLast, real view+worker),
+                                    #        segment matrix, safe rule→where translation (whitelist, no
+                                    #        injection), segment preview (<2s) + dynamic-refresh recompute
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -806,5 +863,32 @@ quick-add creates a record that appears in the list.
   admin "export a segment" (stores the workbook in Redis for a short-TTL download).
   8 tabs; Summary/Orders/Discounts carry real data, the rest render headers + a
   "no data yet" row. Non-admin workbooks are PII-masked.
-- **Glossary** is introduced here (version 1) with the money/order metrics defined;
-  M3 extends (never redefines) it with the analytics metrics.
+- **Glossary** is introduced in Customer 360 (version 1) with the money/order
+  metrics; RFM analytics extends it (version 2, never redefines) with the
+  analytics metrics.
+
+## Assumptions (RFM analytics + segments)
+
+- **Architecture adaptation** (same as prior retrofits) — the materialized view +
+  refresh worker live in `apps/api` (raw SQL migration + in-process BullMQ nightly
+  job), the rule engine + endpoints in `apps/api/src/{analytics,segments}`, the
+  RuleBuilder in `apps/web`, and the glossary in `packages/types` — not
+  `packages/db` / `apps/worker` / `packages/ui`.
+- **RFM is real, the deeper metrics are stubs** — CLV/churn/cohort/LTV:CAC are
+  glossary + `CustomerFeatures` placeholders (no computation this phase), per the
+  non-goals; only RFM (+ revenue/AOV) is wired to real values.
+- **Canonical revenue = paid/fulfilled, refund-adjusted** — both the view and the
+  on-ingest `recomputeFeatures` now filter to `PAID`/`FULFILLED` and subtract
+  refunds, so a customer's badges, the analytics summary, and RFM all agree.
+- **NTILE determinism** — a `customer_id` tiebreak makes quintile boundaries
+  reproducible; with fewer than 5 scored customers each lands in its own tile
+  (the golden dataset uses 5 so ranks are unambiguous).
+- **The refresh runs nightly + once ~10s after boot** (so demos/tests don't wait a
+  day); trigger it on demand with `POST /analytics/refresh` (admin). Dynamic
+  segments are recomputed by the same nightly pass (a single daily sweep — the
+  per-segment `refreshCron` is stored but not independently scheduled yet).
+- **Segments query is injection-safe** — the tree becomes a structured Prisma
+  `where` (whitelisted fields/ops, coerced values); it is never string-built.
+- **Golden test is DB-backed** — it runs the real `customer_rfm` view + worker
+  against Postgres (as in CI); the two DB-backed suites raise their timeout to
+  tolerate parallel-run load.
