@@ -22,7 +22,7 @@ export const RECORDING_STATUSES = ['NONE', 'PENDING', 'STORED', 'BLOCKED', 'FAIL
 export const RecordingStatusSchema = z.enum(RECORDING_STATUSES);
 export type RecordingStatus = z.infer<typeof RecordingStatusSchema>;
 
-export const CONSENT_PURPOSES = ['CALL_RECORDING'] as const;
+export const CONSENT_PURPOSES = ['CALL_RECORDING', 'MARKETING'] as const;
 export const ConsentPurposeSchema = z.enum(CONSENT_PURPOSES);
 export type ConsentPurpose = z.infer<typeof ConsentPurposeSchema>;
 
@@ -30,7 +30,7 @@ export const CONSENT_STATUSES = ['GRANTED', 'WITHDRAWN', 'NOT_CAPTURED'] as cons
 export const ConsentStatusSchema = z.enum(CONSENT_STATUSES);
 export type ConsentStatus = z.infer<typeof ConsentStatusSchema>;
 
-export const CONSENT_SOURCES = ['IVR_DISCLOSURE', 'EXPLICIT'] as const;
+export const CONSENT_SOURCES = ['IVR_DISCLOSURE', 'EXPLICIT', 'SHOPIFY'] as const;
 export const ConsentSourceSchema = z.enum(CONSENT_SOURCES);
 export type ConsentSource = z.infer<typeof ConsentSourceSchema>;
 
@@ -157,7 +157,8 @@ export type RecordingUrlResponse = z.infer<typeof RecordingUrlResponseSchema>;
 export const ConsentSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
-  contactId: z.string(),
+  contactId: z.string().nullable(),
+  customerId: z.string().nullable(),
   purpose: ConsentPurposeSchema,
   status: ConsentStatusSchema,
   source: ConsentSourceSchema.nullable(),

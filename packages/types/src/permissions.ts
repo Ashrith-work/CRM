@@ -68,6 +68,10 @@ export const PERMISSIONS = {
   ANALYTICS_READ: 'analytics:read',
   SEGMENT_READ: 'segment:read',
   SEGMENT_MANAGE: 'segment:manage',
+
+  // M4 — abandoned-cart recovery campaigns.
+  CAMPAIGN_READ: 'campaign:read',
+  CAMPAIGN_MANAGE: 'campaign:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -139,6 +143,9 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.ANALYTICS_READ,
     PERMISSIONS.SEGMENT_READ,
     PERMISSIONS.SEGMENT_MANAGE,
+    // Recovery campaigns (admin manages; everyone can read below).
+    PERMISSIONS.CAMPAIGN_READ,
+    PERMISSIONS.CAMPAIGN_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -171,5 +178,7 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // Reps can view analytics + segments, but not create/edit segments.
     PERMISSIONS.ANALYTICS_READ,
     PERMISSIONS.SEGMENT_READ,
+    // Reps can view campaigns + recovery stats.
+    PERMISSIONS.CAMPAIGN_READ,
   ],
 };

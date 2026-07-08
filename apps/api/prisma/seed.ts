@@ -786,6 +786,86 @@ async function seedPrimaryOrg(): Promise<void> {
   await prisma.customerFeatures.createMany({ data: featureRows });
   bump('customerFeatures', featureRows.length);
 
+  // ----- M4: abandoned-cart recovery (marketing consent, campaign, carts) -----
+  // Marketing Consent from Shopify accepts_marketing — ~70% opted in.
+  const marketingConsents: Prisma.ConsentCreateManyInput[] = commerceCustomers.map((c, i) => ({
+    id: mkId('mconsent'),
+    organizationId: org.id,
+    customerId: c.id,
+    purpose: 'MARKETING',
+    status: i % 10 < 7 ? 'GRANTED' : 'NOT_CAPTURED',
+    source: i % 10 < 7 ? 'SHOPIFY' : null,
+    grantedAt: i % 10 < 7 ? (c.createdAt as Date) : null,
+  }));
+  await prisma.consent.createMany({ data: marketingConsents });
+  bump('consents', marketingConsents.length);
+  const consented = commerceCustomers.filter((_, i) => i % 10 < 7);
+
+  // One customer unsubscribed (proves suppression blocks a send).
+  const suppressedCustomer = consented[0];
+  await prisma.suppression.create({ data: { id: mkId('supp'), organizationId: org.id, email: suppressedCustomer.email, reason: 'UNSUBSCRIBE' } });
+  bump('suppressions', 1);
+
+  // Recovery campaign: 3 steps at T+1h / +24h / +72h, each a versioned template.
+  const stepDefs = [
+    { key: 'recovery-1', delay: 60, subject: 'You left something behind 👀', body: 'Your cart is waiting. Complete your order.' },
+    { key: 'recovery-2', delay: 1440, subject: 'Still thinking it over?', body: 'Your items are still in your cart.' },
+    { key: 'recovery-3', delay: 4320, subject: 'Last chance — your cart expires soon', body: 'Grab your items before they sell out.' },
+  ];
+  const templates = await Promise.all(
+    stepDefs.map((s) =>
+      prisma.messageTemplate.create({
+        data: { id: mkId('tmpl'), organizationId: org.id, key: s.key, version: 1, channel: 'EMAIL', name: s.key, subject: s.subject, bodyHtml: `<p>${s.body}</p><p><a href="{{unsubscribe_url}}">Unsubscribe</a></p>`, bodyText: `${s.body}\nUnsubscribe: {{unsubscribe_url}}` },
+      }),
+    ),
+  );
+  bump('messageTemplates', templates.length);
+  const campaign = await prisma.campaign.create({ data: { id: mkId('camp'), organizationId: org.id, name: 'Abandoned Cart Recovery', type: 'ABANDONED_CART', status: 'ACTIVE', channel: 'EMAIL' } });
+  await prisma.campaignStep.createMany({ data: stepDefs.map((s, i) => ({ id: mkId('cstep'), campaignId: campaign.id, stepOrder: i + 1, delayMinutes: s.delay, templateId: templates[i].id })) });
+  const steps = await prisma.campaignStep.findMany({ where: { campaignId: campaign.id }, orderBy: { stepOrder: 'asc' } });
+  bump('campaigns', 1);
+  bump('campaignSteps', steps.length);
+
+  // Abandoned carts (2–5 days ago, unconverted) for consented customers → the
+  // live enrollment sweep picks them up. Plus one CONVERTED cart (recovered).
+  const cartRows: Prisma.CartCreateManyInput[] = [];
+  const enrollmentRows: Prisma.CampaignEnrollmentCreateManyInput[] = [];
+  const sendRows: Prisma.CampaignSendCreateManyInput[] = [];
+  const recoveredOrder = orderRows.find((o) => o.financialStatus === 'PAID');
+  consented.slice(0, 8).forEach((c, i) => {
+    const startedAt = new Date(NOW.getTime() - (2 + i) * 86_400_000);
+    const cartId = mkId('cart');
+    const recovered = i === 1 && recoveredOrder; // the 2nd is already recovered
+    cartRows.push({ id: cartId, organizationId: org.id, externalId: `chk_${5000 + i}`, customerId: c.id, checkoutStartedAt: startedAt, convertedOrderId: recovered ? recoveredOrder!.id : null });
+    const enrollId = mkId('enr');
+    enrollmentRows.push({
+      id: enrollId,
+      organizationId: org.id,
+      campaignId: campaign.id,
+      cartId,
+      customerId: c.id,
+      email: c.email,
+      status: recovered ? 'CONVERTED' : c.id === suppressedCustomer.id ? 'HALTED' : 'ACTIVE',
+      checkoutStartedAt: startedAt,
+      enrolledAt: new Date(startedAt.getTime() + 60 * 60_000),
+      convertedOrderId: recovered ? recoveredOrder!.id : null,
+      convertedAt: recovered ? new Date(startedAt.getTime() + 3 * 60 * 60_000) : null,
+      haltReason: c.id === suppressedCustomer.id ? 'suppressed:unsubscribe' : recovered ? 'purchased' : null,
+    });
+    // First step already sent (except the suppressed one, which is BLOCKED).
+    if (c.id === suppressedCustomer.id) {
+      sendRows.push({ id: mkId('csend'), organizationId: org.id, enrollmentId: enrollId, campaignStepId: steps[0].id, channel: 'EMAIL', templateVersion: 1, status: 'BLOCKED', blockedReason: 'suppressed:unsubscribe', outcomeAt: startedAt });
+    } else {
+      sendRows.push({ id: mkId('csend'), organizationId: org.id, enrollmentId: enrollId, campaignStepId: steps[0].id, channel: 'EMAIL', templateVersion: 1, status: recovered ? 'OPENED' : 'SENT', providerMessageId: `seed_${enrollId}`, sentAt: new Date(startedAt.getTime() + 60 * 60_000), outcomeAt: recovered ? new Date(startedAt.getTime() + 2 * 60 * 60_000) : null });
+    }
+  });
+  await prisma.cart.createMany({ data: cartRows });
+  await prisma.campaignEnrollment.createMany({ data: enrollmentRows });
+  await prisma.campaignSend.createMany({ data: sendRows });
+  bump('carts', cartRows.length);
+  bump('campaignEnrollments', enrollmentRows.length);
+  bump('campaignSends', sendRows.length);
+
   // Optional perf seed: SEED_COMMERCE_CUSTOMERS=100000 bulk-inserts customers +
   // features + one timeline interaction each (for the Customer-360 P95 test).
   const bulk = Number(process.env.SEED_COMMERCE_CUSTOMERS ?? 0);
@@ -866,6 +946,13 @@ async function seedSecondOrg(): Promise<void> {
 // Re-run: clear seeded tables (children first, FK-safe).
 // ---------------------------------------------------------------------------
 async function clearAll(): Promise<void> {
+  // M4 recovery (children first).
+  await prisma.campaignSend.deleteMany();
+  await prisma.campaignEnrollment.deleteMany();
+  await prisma.campaignStep.deleteMany();
+  await prisma.campaign.deleteMany();
+  await prisma.messageTemplate.deleteMany();
+  await prisma.suppression.deleteMany();
   // M2 Customer 360.
   await prisma.interaction.deleteMany();
   await prisma.customerFeatures.deleteMany();

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import type { AnalyticsSummary } from '@crm/types';
-import { getAnalyticsSummary, refreshAnalytics } from '@/lib/api';
+import Link from 'next/link';
+import type { AnalyticsSummary, RecoveryStats } from '@crm/types';
+import { getAnalyticsSummary, getRecoveryStats, refreshAnalytics } from '@/lib/api';
 import { Card, PageHeader, Button, Spinner, ErrorPanel, formatDate, formatMoney } from '@/components/crm/ui';
 import { MetricGrid } from '@/components/crm/MetricTile';
 import { InfoTooltip } from '@/components/crm/InfoTooltip';
@@ -29,11 +30,13 @@ export default function AnalyticsPage() {
   const [message, setMessage] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [note, setNote] = useState('');
+  const [recovery, setRecovery] = useState<RecoveryStats | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
       setData(await getAnalyticsSummary(getToken));
+      getRecoveryStats(getToken).then(setRecovery).catch(() => setRecovery(null));
       setStatus('ready');
     } catch (err) {
       setMessage((err as Error).message);
@@ -84,6 +87,16 @@ export default function AnalyticsPage() {
             <Tile label="Scored customers" value={`${data.scoredCustomers.toLocaleString()}`} sub={`of ${data.totalCustomers.toLocaleString()} total`} metricKey="rfm" />
             <Tile label="Net revenue" value={formatMoney(data.netRevenueMinor, currency)} metricKey="net_revenue" />
             <Tile label="Avg order value" value={formatMoney(data.aovMinor, currency)} metricKey="avg_order_value" />
+            {recovery && (
+              <Link href="/dashboard/campaigns" className="block">
+                <Tile
+                  label="Cart recovery rate"
+                  value={`${(recovery.recoveryRate * 100).toFixed(1)}%`}
+                  sub={`${recovery.recoveredCarts}/${recovery.abandonedCarts} carts · ${formatMoney(recovery.recoveredRevenueMinor, recovery.currency ?? currency)} recovered →`}
+                  metricKey="recovery_rate"
+                />
+              </Link>
+            )}
           </MetricGrid>
 
           <Card

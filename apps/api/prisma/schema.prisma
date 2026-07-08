@@ -77,6 +77,13 @@ model Organization {
   segments           Segment[]
   segmentMemberships SegmentMembership[]
 
+  // M4 — abandoned-cart recovery (the closed loop).
+  campaigns           Campaign[]
+  campaignEnrollments CampaignEnrollment[]
+  campaignSends       CampaignSend[]
+  messageTemplates    MessageTemplate[]
+  suppressions        Suppression[]
+
   @@index([slug])
 }
 
@@ -1044,6 +1051,7 @@ enum RecordingStatus {
 
 enum ConsentPurpose {
   CALL_RECORDING
+  MARKETING
 }
 
 enum ConsentStatus {
@@ -1055,6 +1063,7 @@ enum ConsentStatus {
 enum ConsentSource {
   IVR_DISCLOSURE
   EXPLICIT
+  SHOPIFY
 }
 
 model Call {
@@ -1100,7 +1109,10 @@ model Call {
 model Consent {
   id             String         @id @default(cuid())
   organizationId String
-  contactId      String
+  /** Call-recording consent is contact-scoped; marketing consent is
+   * customer-scoped (from Shopify accepts_marketing). Exactly one is set. */
+  contactId      String?
+  customerId     String?
   purpose        ConsentPurpose @default(CALL_RECORDING)
   status         ConsentStatus  @default(NOT_CAPTURED)
   source         ConsentSource?
@@ -1113,5 +1125,171 @@ model Consent {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, contactId, purpose])
+  @@unique([organizationId, customerId, purpose])
   @@index([organizationId, contactId])
+  @@index([organizationId, customerId, purpose])
+}
+
+// ============================================================================
+// Milestone 4 — abandoned-cart recovery (the first CLOSED LOOP / MVP ship line).
+// A repeatable enrollment sweep finds abandoned carts; a repeatable send sweep
+// fires due steps (T+1h/+24h/+72h), consent-gated, and HALTS on purchase. Money
+// is paise; time UTC. Suppression + marketing Consent gate every send.
+// ============================================================================
+
+enum CampaignType {
+  ABANDONED_CART
+}
+
+enum CampaignStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum MessageChannel {
+  EMAIL
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  CONVERTED
+  HALTED
+  COMPLETED
+}
+
+enum CampaignSendStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  BLOCKED
+  FAILED
+  DELAYED
+}
+
+enum SuppressionReason {
+  UNSUBSCRIBE
+  BOUNCE
+  COMPLAINT
+  MANUAL
+}
+
+model MessageTemplate {
+  id             String         @id @default(cuid())
+  organizationId String
+  key            String
+  version        Int            @default(1)
+  channel        MessageChannel @default(EMAIL)
+  name           String
+  subject        String
+  bodyHtml       String
+  bodyText       String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  steps        CampaignStep[]
+
+  @@unique([organizationId, key, version])
+}
+
+model Campaign {
+  id                       String         @id @default(cuid())
+  organizationId           String
+  name                     String
+  type                     CampaignType   @default(ABANDONED_CART)
+  status                   CampaignStatus @default(ACTIVE)
+  channel                  MessageChannel @default(EMAIL)
+  /** Attribution window (minutes) for crediting a recovery. Default 7 days. */
+  attributionWindowMinutes Int            @default(10080)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+  deletedAt                DateTime?
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  steps        CampaignStep[]
+  enrollments  CampaignEnrollment[]
+
+  @@index([organizationId, type, status])
+}
+
+model CampaignStep {
+  id          String @id @default(cuid())
+  campaignId  String
+  stepOrder   Int
+  /** T+delay from checkoutStartedAt: 60 / 1440 / 4320. */
+  delayMinutes Int
+  templateId  String
+
+  campaign Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  template MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sends    CampaignSend[]
+
+  @@unique([campaignId, stepOrder])
+}
+
+model CampaignEnrollment {
+  id                String           @id @default(cuid())
+  organizationId    String
+  campaignId        String
+  cartId            String
+  customerId        String
+  email             String
+  status            EnrollmentStatus @default(ACTIVE)
+  checkoutStartedAt DateTime
+  enrolledAt        DateTime         @default(now())
+  convertedOrderId  String?
+  convertedAt       DateTime?
+  haltedAt          DateTime?
+  haltReason        String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  sends        CampaignSend[]
+
+  // Idempotent enrollment: the same cart is never enrolled twice.
+  @@unique([campaignId, cartId])
+  @@index([organizationId, status])
+}
+
+model CampaignSend {
+  id              String             @id @default(cuid())
+  organizationId  String
+  enrollmentId    String
+  campaignStepId  String
+  channel         MessageChannel     @default(EMAIL)
+  templateVersion Int
+  status          CampaignSendStatus @default(QUEUED)
+  providerMessageId String?
+  blockedReason   String?
+  sentAt          DateTime?
+  outcomeAt       DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enrollment   CampaignEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  step         CampaignStep       @relation(fields: [campaignStepId], references: [id], onDelete: Cascade)
+
+  // One send per step per enrollment (idempotent send).
+  @@unique([enrollmentId, campaignStepId])
+  @@index([organizationId, status])
+  @@index([providerMessageId])
+}
+
+model Suppression {
+  id             String            @id @default(cuid())
+  organizationId String
+  email          String
+  reason         SuppressionReason
+  createdAt      DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, email])
+  @@index([organizationId, email])
 }

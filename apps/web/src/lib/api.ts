@@ -160,6 +160,14 @@ import {
   type SegmentMembersResponse,
   type SegmentPreviewResponse,
 } from '@crm/types';
+import {
+  CampaignListResponseSchema,
+  RecoveryStatsSchema,
+  EnrollmentListResponseSchema,
+  type CampaignListResponse,
+  type RecoveryStats,
+  type EnrollmentListResponse,
+} from '@crm/types';
 import { z, type ZodType } from 'zod';
 
 const StageArrayResponseSchema = z.object({ data: z.array(StageSchema) });
@@ -733,4 +741,22 @@ export function getSegmentMembers(
 }
 export function refreshSegment(getToken: TokenGetter, id: string): Promise<Segment> {
   return request(getToken, `${API_ROUTES.segments}/${id}/refresh`, SegmentSchema, { method: 'POST' });
+}
+
+// --- Campaigns / abandoned-cart recovery (M4) -------------------------------
+export function getCampaigns(getToken: TokenGetter): Promise<CampaignListResponse> {
+  return request(getToken, API_ROUTES.campaigns, CampaignListResponseSchema);
+}
+export function getRecoveryStats(getToken: TokenGetter): Promise<RecoveryStats> {
+  return request(getToken, `${API_ROUTES.campaigns}/recovery-stats`, RecoveryStatsSchema);
+}
+export function getCampaignEnrollments(
+  getToken: TokenGetter,
+  campaignId: string,
+  params: { cursor?: string; limit?: number } = {},
+): Promise<EnrollmentListResponse> {
+  return request(getToken, `${API_ROUTES.campaigns}/${campaignId}/enrollments${qs(params)}`, EnrollmentListResponseSchema);
+}
+export function runCampaigns(getToken: TokenGetter): Promise<{ enrolled: number; sent: number }> {
+  return request(getToken, `${API_ROUTES.campaigns}/run`, z.object({ enrolled: z.number(), sent: z.number() }), { method: 'POST' });
 }

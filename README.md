@@ -1,4 +1,4 @@
-# CRM — M0 + M1 + M2 + M3 + M4 + M5 + Commerce (Shopify) + Customer 360 + RFM Analytics
+# CRM — M0–M5 + Commerce (Shopify) + Customer 360 + RFM Analytics + Cart Recovery (MVP loop)
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -51,6 +51,11 @@ clients never duplicate it.
 > **JSON rule-tree segment builder** targets a campaign audience (safe
 > parameterized queries, static snapshot / dynamic refresh). (The user's "M3";
 > labeled *RFM Analytics* to avoid colliding with the repo's M3 = Activity.)
+> **Cart Recovery (the MVP ship line):** the first closed loop — abandoned carts
+> trigger a **consent-gated** email recovery sequence (T+1h/+24h/+72h) that **halts
+> on purchase**, with a dashboard tile reporting **recovery rate + recovered
+> revenue** on real orders. Restart-safe sweeps (not per-step delayed jobs); every
+> send is consent-checked + logged; blocked sends are audited, never silent.
 > **Milestone 5:** call management — **MyOperator** telephony (click-to-call +
 > inbound/outbound webhooks) logging every call to the matched contact's
 > timeline, with recordings stored in **Cloudinary** and playable ONLY with
@@ -145,6 +150,9 @@ content on both clients. It **wipes the seeded tables first**, then inserts:
   so the Settings panel shows real CRM order counts. **RFM segments** for these
   customers populate on the first refresh (~10s after the API boots, or `POST
   /analytics/refresh`). Set `SEED_COMMERCE_CUSTOMERS=100000` for the 100k perf run.
+- A **recovery campaign** (3 steps) + marketing `Consent` (~70% opted in), a few
+  abandoned carts, one **recovered** cart, and one **suppressed** customer — so the
+  recovery tile shows real rate + revenue, and the send/enrollment sweeps run live.
 
 ```bash
 pnpm db:seed                 # SMALL (fast local demo) — the default
@@ -284,6 +292,35 @@ and audit-logged. List endpoints are cursor-paginated and return
 | POST | `/api/v1/segments` | `segment:manage` | save (static snapshot \| dynamic + refreshCron) |
 | GET | `/api/v1/segments` \| `/:id` \| `/:id/members` | `segment:read` | list / detail / members (masked per role) |
 | POST | `/api/v1/segments/:id/refresh` | `segment:manage` | recompute a dynamic segment's membership |
+| GET | `/api/v1/campaigns` \| `/:id/enrollments` | `campaign:read` | recovery campaign(s) + enrollments (masked per role) |
+| GET | `/api/v1/campaigns/recovery-stats` | `campaign:read` | recovery rate + recovered revenue (the MVP tile) |
+| POST | `/api/v1/campaigns/run` | `campaign:manage` | trigger the enrollment + send sweeps now |
+| GET | `/api/v1/campaigns/unsubscribe` | **Public** (HMAC) | signed unsubscribe link → Suppression |
+| POST | `/api/v1/webhooks/resend` | **Public** (HMAC) | delivery events → CampaignSend status + Suppression |
+
+### Abandoned-cart recovery (the closed loop / MVP ship line)
+
+- **Consent gate is mandatory** — a marketing send is allowed ONLY if the customer
+  has GRANTED marketing `Consent` (seeded from Shopify `accepts_marketing`) AND the
+  email is not on `Suppression`. A blocked send is **audited** (`marketing.blocked`)
+  and written as a `BLOCKED` CampaignSend — never silently skipped.
+- **Restart-safe sweeps, not per-step delayed jobs** — an **enrollment** sweep finds
+  carts abandoned > 60 min (unconverted, consented, not suppressed) and enrolls them
+  idempotently (`UNIQUE(campaignId, cartId)`); a **send** sweep fires the earliest
+  DUE step (T+1h/+24h/+72h from `checkoutStartedAt`) — each tick queries what's due.
+- **Halt on purchase** — before every send it re-checks the cart's `convertedOrderId`
+  (set by M1 ingestion when the matching order arrives) and re-checks consent; a
+  conversion or withdrawal halts the sequence immediately.
+- **Email channel behind a one-method interface** (`MessageChannelAdapter`) so
+  WhatsApp/SMS slot in later without touching campaign logic; the **Resend** adapter
+  is mock-safe. Every send writes a `CampaignSend` (channel, templateVersion,
+  status, outcomeAt). A provider outage marks the send **DELAYED** (not failed) and
+  retries next tick. Resend webhooks map delivered/opened/clicked/bounced/complained
+  → status + `Suppression`; a signed unsubscribe link suppresses future sends.
+- **Recovery tile** — `recovery rate = recovered ÷ abandoned` (a cart is recovered
+  if the customer ordered after enrollment within the attribution window, default
+  7 days); `recovered revenue` = net of those orders. Both resolve their tooltip
+  from the glossary.
 
 ### RFM analytics + segmentation
 
@@ -576,6 +613,16 @@ New tables, all org-scoped with `UNIQUE(org, externalId)` and integer-minor mone
 - **SegmentMembership** — `UNIQUE(segmentId, customerId)`; snapshot for static,
   recomputed for dynamic
 
+### Data model (cart recovery)
+
+- **Consent** is now polymorphic — `contactId?` (call recording, M5) OR
+  `customerId?` (marketing, from Shopify), + `MARKETING` purpose / `SHOPIFY` source
+- **Suppression** — `UNIQUE(org, email)`, reason unsubscribe/bounce/complaint/manual
+- **Campaign** / **CampaignStep** (delayMinutes 60/1440/4320, versioned
+  `MessageTemplate`) / **CampaignEnrollment** (`UNIQUE(campaignId, cartId)` —
+  idempotent) / **CampaignSend** (`UNIQUE(enrollmentId, campaignStepId)` — one send
+  per step; channel, templateVersion, status, outcomeAt)
+
 ## RBAC model
 
 Permissions and role→permission grants are defined once in
@@ -633,6 +680,10 @@ pnpm --filter @crm/api test        # unit: custom-field validation, activity emi
                                     #        single-order + zero-order + daysSinceLast, real view+worker),
                                     #        segment matrix, safe rule→where translation (whitelist, no
                                     #        injection), segment preview (<2s) + dynamic-refresh recompute
+                                    #   Recovery — HALT-ON-PURCHASE (convert mid-sequence → no more sends),
+                                    #        consent gate (blocked + audit-logged), suppression respected,
+                                    #        provider outage → DELAYED + retry, idempotent enrollment,
+                                    #        recovery-rate vs HAND-COMPUTED fixture, Resend webhooks
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -892,3 +943,25 @@ quick-add creates a record that appears in the list.
 - **Golden test is DB-backed** — it runs the real `customer_rfm` view + worker
   against Postgres (as in CI); the two DB-backed suites raise their timeout to
   tolerate parallel-run load.
+
+## Assumptions (cart recovery — the MVP loop)
+
+- **Architecture adaptation** (same retrofit) — the enrollment + send sweeps run
+  in-process (`apps/api/src/campaigns` + BullMQ repeatables), the ConsentGate +
+  Resend adapter + webhooks live under `apps/api`, and the UI in `apps/web` — not
+  `apps/worker` / `packages/shared` / `packages/ui`.
+- **Consent is polymorphic, not a rebuild** — rather than a separate marketing
+  table, the existing M5 `Consent` gained an optional `customerId` + `MARKETING`
+  purpose (M5 call-recording rows keep `contactId`), so "no send without granted
+  marketing consent" is one gate over one table.
+- **Sweeps, not delayed jobs** — restart-safe by construction (each tick queries
+  what's due); tunable via `ABANDONED_CART_THRESHOLD_MINUTES` (60) and the
+  enroll/send intervals. Also runs once ~10s after boot for a live demo.
+- **Email is mock-safe** — without `RESEND_API_KEY` the adapter logs + returns a
+  synthetic id (the loop still runs end-to-end); the webhook is dev-lenient unless
+  `RESEND_WEBHOOK_SECRET` is set. Unsubscribe links are HMAC-signed
+  (`UNSUBSCRIBE_SECRET`). Verified live: sweeps fired steps 1→2→3, a suppressed
+  customer's send was BLOCKED + audited, a converted cart halted, and the
+  unsubscribe link wrote a Suppression row.
+- **Non-goals honored** — email only (WhatsApp/SMS is the next channel behind the
+  same interface), one campaign type (ABANDONED_CART), no AI copy, no mobile.

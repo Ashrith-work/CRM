@@ -71,6 +71,20 @@ const envSchema = z.object({
   // Milestone 3 — RFM analytics.
   /** Nightly RFM refresh cadence (ms). Default 24h. */
   RFM_REFRESH_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
+
+  // Milestone 4 — abandoned-cart recovery.
+  /** A cart is "abandoned" after this many minutes without conversion. */
+  ABANDONED_CART_THRESHOLD_MINUTES: z.coerce.number().int().min(1).default(60),
+  /** Enrollment sweep cadence (ms). Default 5 min. */
+  CAMPAIGN_ENROLL_INTERVAL_MS: z.coerce.number().int().min(10_000).default(5 * 60 * 1000),
+  /** Send sweep cadence (ms). Default 2 min. */
+  CAMPAIGN_SEND_INTERVAL_MS: z.coerce.number().int().min(10_000).default(2 * 60 * 1000),
+  /** Base URL used to build the (signed) unsubscribe link in emails. */
+  APP_BASE_URL: z.string().default('http://localhost:4000'),
+  /** HMAC key for signing unsubscribe links. */
+  UNSUBSCRIBE_SECRET: z.string().default('dev-unsubscribe-secret'),
+  /** When set, Resend webhooks must carry a matching HMAC (else dev-lenient). */
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -63,10 +63,17 @@ export const GLOSSARY_REGISTRY: Record<string, GlossaryEntry> = {
   },
   recovery_rate: {
     metricKey: 'recovery_rate',
-    plainLanguage: 'Share of abandoned checkouts later converted to an order.',
-    formula: 'converted_carts ÷ abandoned_carts — enabled with abandoned-cart recovery (M4)',
-    dataWindow: 'period',
-    lastSynced: null,
+    plainLanguage: 'Share of abandoned carts that were recovered — the customer placed a qualifying order after being enrolled in the recovery sequence, within the attribution window.',
+    formula: 'recovered_carts ÷ abandoned_carts (enrolled)',
+    dataWindow: 'attribution window (default 7 days)',
+    lastSynced: SYNCED,
+  },
+  recovered_revenue: {
+    metricKey: 'recovered_revenue',
+    plainLanguage: 'Net revenue from orders that recovered an abandoned cart.',
+    formula: 'Σ(order.totalMinor − order.refundedMinor) for recovered carts',
+    dataWindow: 'attribution window (default 7 days)',
+    lastSynced: SYNCED,
   },
   // Stubs — Phase 2.
   clv: {

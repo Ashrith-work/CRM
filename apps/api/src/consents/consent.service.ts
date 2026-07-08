@@ -38,7 +38,7 @@ export class ConsentService {
       where: { organizationId, contactId: { in: ids }, purpose: 'CALL_RECORDING', deletedAt: null },
       select: { contactId: true, status: true },
     });
-    return new Map(rows.map((r) => [r.contactId, r.status as ConsentStatus]));
+    return new Map(rows.map((r) => [r.contactId as string, r.status as ConsentStatus]));
   }
 
   async list(organizationId: string, contactId: string): Promise<ConsentDto[]> {
@@ -93,6 +93,7 @@ export function serializeConsent(row: ConsentRow): ConsentDto {
     id: row.id,
     organizationId: row.organizationId,
     contactId: row.contactId,
+    customerId: row.customerId,
     purpose: row.purpose,
     status: row.status,
     source: row.source,

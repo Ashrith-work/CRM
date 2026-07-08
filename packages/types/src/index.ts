@@ -12,6 +12,7 @@ export * from './commerce';
 export * from './customer360';
 export * from './glossary';
 export * from './analytics';
+export * from './campaigns';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -53,4 +54,7 @@ export const API_ROUTES = {
   // M3 analytics + segmentation.
   analytics: `/${API_PREFIX}/analytics`,
   segments: `/${API_PREFIX}/segments`,
+  // M4 abandoned-cart recovery.
+  campaigns: `/${API_PREFIX}/campaigns`,
+  resendWebhook: `/${API_PREFIX}/webhooks/resend`,
 } as const;

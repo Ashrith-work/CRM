@@ -30,6 +30,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
 import { CustomersModule } from './customers/customers.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -80,6 +81,8 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     IngestionModule,
     // M3 — RFM analytics (materialized view + nightly worker) + segmentation.
     AnalyticsModule,
+    // M4 — abandoned-cart recovery (the closed loop / MVP ship line).
+    CampaignsModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.
