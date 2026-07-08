@@ -1,4 +1,4 @@
-# CRM — M0 (Foundation) + M1 (Core CRM) + M2 (Revenue) + M3 (Activity) + M4 (Dashboard) + M5 (Calls) + Commerce (Shopify)
+# CRM — M0 + M1 + M2 + M3 + M4 + M5 + Commerce (Shopify) + Customer 360
 
 An API-first CRM monorepo. A single **NestJS** backend is consumed by both a
 **Next.js** web app (installable PWA) and an **Expo** React Native app. All
@@ -37,6 +37,13 @@ clients never duplicate it.
 > as integer paise, a BullMQ backfill + nightly reconciliation worker, and a
 > Settings connection panel. No analytics/AI. (This is the user's "M1"; labeled
 > *Commerce* here to avoid colliding with the repo's M1 = Core CRM.)
+> **Customer 360:** one profile per commerce customer — a unified, filterable
+> timeline (ONE indexed `Interaction` query), a recent-orders panel with a range
+> control, denormalized metric badges (each with a glossary tooltip), and a
+> one-click multi-tab Excel "Customer Experience" export. **PII masked per role**;
+> **P95 < 300ms on 100k customers** (measured 1–14ms at the query layer). (The
+> user's "M2"; labeled *Customer 360* to avoid colliding with the repo's M2 =
+> Revenue.)
 > **Milestone 5:** call management — **MyOperator** telephony (click-to-call +
 > inbound/outbound webhooks) logging every call to the matched contact's
 > timeline, with recordings stored in **Cloudinary** and playable ONLY with
@@ -256,6 +263,34 @@ and audit-logged. List endpoints are cursor-paginated and return
 | POST | `/api/v1/ingestion/shopify/sync-now` | `commerce:manage` | enqueue the backfill (runs in the worker, never the request) |
 | POST | `/api/v1/customers/merge` | `commerce:manage` | `{ survivorId, mergedId }` — manual identity merge (audited) |
 | POST | `/api/v1/webhooks/shopify` | **Public** (HMAC-verified) | live topics; **idempotent** on `X-Shopify-Webhook-Id` (WebhookDelivery ledger) |
+| GET | `/api/v1/customers` | `commerce:read` | customer list (net revenue / orders / last order); **PII masked** unless `pii:read` |
+| GET | `/api/v1/customers/:id` | `commerce:read` | Customer 360 (identity + consents + feature badges); cached; masked per role |
+| GET | `/api/v1/customers/:id/timeline` | `commerce:read` | unified timeline (`?type=&cursor=`) — ONE indexed `Interaction` query |
+| GET | `/api/v1/customers/:id/orders` | `commerce:read` | recent orders + range (`?limit=(0=all)&from=&to=&year=&month=`); net = total−refunded |
+| GET | `/api/v1/customers/:id/export` | `commerce:read` | sync **.xlsx** download (8 tabs); masked unless `pii:read`; writes ExperienceExport + AuditLog |
+| POST | `/api/v1/customers/:id/export/async` \| `/export/segment` | `commerce:read` / `commerce:manage` | async/batch export via the worker (JobStatus) |
+
+### Customer 360
+
+- **Fast timeline** — `Interaction` is a **denormalized pointer** (`type`, `refId`,
+  `summary`, `occurredAt`) written per order/event on ingest, so the 360 timeline
+  is **one indexed query** (`@@index([org, customerId, occurredAt])`) instead of a
+  live cross-join. `CustomerFeatures` denormalizes per-customer aggregates (net
+  revenue, order count, first/last, AOV — refund-aware) for the list + badges +
+  fast profile. **P95 < 300ms on 100k** (index scans measured 1–14ms; profile is
+  Redis-cached 60s).
+- **Recent-orders range control** — default last 3; presets 3/6/12/all; custom
+  from–to; year/month. Dates render "Mon YYYY"; value is **net (total−refunded)**
+  in paise; discount code + amount shown.
+- **PII masking by role** — only `pii:read` (owner/admin) sees raw email/phone; all
+  others get masked forms (`j•••@n•••.co`, `•••••••3210`) on the profile, list, and
+  **export**. Every export writes an `ExperienceExport` **and** an `AuditLog` row.
+- **Glossary registry** (`@crm/types` `glossary`) — the single source mapping
+  `metricKey → { plainLanguage, formula, dataWindow, lastSynced }`; the web
+  `InfoTooltip` resolves every metric's tooltip from it (the same source will feed
+  the AI assistant + exports, so a number never means two things).
+- Merged customers resolve to the **survivor** (orders re-attributed in M1); RFM/
+  CLV/churn/size/fit/style badges are **placeholders** until M3.
 
 ### Commerce ingestion (Shopify)
 
@@ -478,6 +513,16 @@ New tables, all org-scoped with `UNIQUE(org, externalId)` and integer-minor mone
 
 (These are the commerce entities, distinct from the CRM's Contact/Company/Deal.)
 
+### Data model (Customer 360)
+
+- **Interaction** — denormalized timeline pointer (`type`
+  order/event/message/call/ticket/note/return, `refId`, `summary`, `occurredAt`);
+  `UNIQUE(org, type, refId)` (idempotent) + `@@index([org, customerId, occurredAt])`
+- **CustomerFeatures** — per-customer aggregates (netRevenueMinor, orderCount,
+  first/last order, AOV) maintained on ingest, + M3 placeholders (rfm/clv/churn/
+  size/fit/style); `UNIQUE(org, customerId)`
+- **ExperienceExport** — export audit (actor, customerId?, masked, createdAt)
+
 ## RBAC model
 
 Permissions and role→permission grants are defined once in
@@ -527,6 +572,10 @@ pnpm --filter @crm/api test        # unit: custom-field validation, activity emi
                                     #        (status/refund/variant), HMAC valid/tampered, webhook dedup
                                     #        idempotency, pagination + 429 backoff resume, identity merge
                                     #        (guest+account→one, email-unique respected), reconcile gap-fill
+                                    #   Customer 360 — PII masking, recent-orders range logic (presets/
+                                    #        custom/year-month, net + "Mon YYYY"), timeline ordering+type
+                                    #        filter, Excel export content + masking + audit rows, glossary
+                                    #        resolution; 100k read P95 (index scans 1–14ms)
 pnpm --filter @crm/api test:e2e    # integration (real Postgres):
                                     #   M1 — create→timeline, convert+dedup, re-convert blocked, tag filter,
                                     #        company-delete detaches, RBAC, soft-delete
@@ -729,7 +778,33 @@ quick-add creates a record that appears in the list.
   recomputes `financialStatus`; the order is never deleted/zeroed.
 - **Backfill uses REST cursor pagination + 429 backoff**; the Shopify **Bulk
   Operations** (JSONL) path is the documented next step for very large histories.
-- **Commerce read/manage is admin-only** (`commerce:read`/`commerce:manage` on
-  owner+admin); Settings is the only UI. Org for a webhook resolves via
+- **Commerce read** is granted to all roles (`commerce:read`) so reps can view
+  Customer 360 (masked); `commerce:manage` (connect/sync/merge/segment-export) and
+  `pii:read` (unmasked) are owner/admin. Org for a webhook resolves via
   `X-Shopify-Shop-Domain` → `Integration.config.shopDomain` (single-store falls
   back to the sole Shopify integration).
+
+## Assumptions (Customer 360)
+
+- **Architecture adaptation** (same as prior retrofits) — built into `apps/api`
+  (`customers` module + in-process export worker) + `packages/types` glossary +
+  `apps/web` components, not `apps/worker`/`packages/shared`/`packages/ui`.
+- **Interaction is the fast-360 backbone** — written on ingest per order (ORDER)
+  and per checkout (EVENT); the seed backfills it for seeded orders, and
+  `CommerceIngestService` recomputes `CustomerFeatures` per order. Real M2 data =
+  ORDER + EVENT interactions; message/call/ticket/note/return are future.
+- **Performance** — the 300ms P95 is met at the query layer (measured 1–14ms on
+  100k via `EXPLAIN ANALYZE` on the `Interaction`/`CustomerFeatures` indexes) plus
+  a 60s Redis cache on the profile; run `SEED_COMMERCE_CUSTOMERS=100000 pnpm
+  db:seed` to reproduce the 100k dataset.
+- **Consent badges are placeholders** — the commerce `Customer` isn't linked to the
+  CRM `Consent`/`Contact`, so marketing/call_recording render `NOT_CAPTURED` for
+  now (wired in a later phase). RFM/CLV/churn/size/fit/style badges are likewise
+  placeholders until M3 fills `CustomerFeatures`.
+- **Export** — single-customer is a **sync** `.xlsx` stream (the acceptance path);
+  the async worker + JobStatus + segment/batch path is wired for large history and
+  admin "export a segment" (stores the workbook in Redis for a short-TTL download).
+  8 tabs; Summary/Orders/Discounts carry real data, the rest render headers + a
+  "no data yet" row. Non-admin workbooks are PII-masked.
+- **Glossary** is introduced here (version 1) with the money/order metrics defined;
+  M3 extends (never redefines) it with the analytics metrics.

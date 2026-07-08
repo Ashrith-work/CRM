@@ -132,6 +132,20 @@ import {
   type MergeCustomersInput,
   type MergeResult,
 } from '@crm/types';
+import {
+  CustomerListResponseSchema,
+  Customer360Schema,
+  TimelineResponseSchema,
+  RecentOrdersResponseSchema,
+  ExportAsyncResponseSchema,
+  ExportStatusResponseSchema,
+  type CustomerListResponse,
+  type Customer360,
+  type TimelineResponse,
+  type RecentOrdersResponse,
+  type ExportAsyncResponse,
+  type ExportStatusResponse,
+} from '@crm/types';
 import { z, type ZodType } from 'zod';
 
 const StageArrayResponseSchema = z.object({ data: z.array(StageSchema) });
@@ -624,4 +638,51 @@ export function mergeCustomers(getToken: TokenGetter, body: MergeCustomersInput)
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+// --- Customer 360 (M2) ------------------------------------------------------
+export type CustomerListParams = { cursor?: string; limit?: number; search?: string; sort?: string; order?: 'asc' | 'desc' };
+export function listCustomers(getToken: TokenGetter, params: CustomerListParams = {}): Promise<CustomerListResponse> {
+  return request(getToken, `${API_ROUTES.customers}${qs(params)}`, CustomerListResponseSchema);
+}
+export function getCustomer360(getToken: TokenGetter, id: string): Promise<Customer360> {
+  return request(getToken, `${API_ROUTES.customers}/${id}`, Customer360Schema);
+}
+export type TimelineParams = { cursor?: string; limit?: number; type?: string };
+export function getCustomerTimeline(getToken: TokenGetter, id: string, params: TimelineParams = {}): Promise<TimelineResponse> {
+  return request(getToken, `${API_ROUTES.customers}/${id}/timeline${qs(params)}`, TimelineResponseSchema);
+}
+export type RecentOrdersParams = { limit?: number; from?: string; to?: string; year?: number; month?: number };
+export function getRecentOrders(getToken: TokenGetter, id: string, params: RecentOrdersParams = {}): Promise<RecentOrdersResponse> {
+  return request(getToken, `${API_ROUTES.customers}/${id}/orders${qs(params)}`, RecentOrdersResponseSchema);
+}
+
+/** Fetch a binary .xlsx with the bearer token (one silent 401 refresh + retry). */
+async function requestBlob(getToken: TokenGetter, path: string, init?: RequestInit): Promise<Blob> {
+  const doFetch = async (skipCache: boolean): Promise<Response> => {
+    const token = await getToken(skipCache ? { skipCache: true } : undefined);
+    if (!token) throw new ApiAuthError();
+    return fetch(`${API_URL}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...init?.headers }, cache: 'no-store' });
+  };
+  let res = await doFetch(false);
+  if (res.status === 401) res = await doFetch(true);
+  if (!res.ok) {
+    if (res.status === 401) throw new ApiAuthError();
+    throw new Error(`${res.status} ${res.statusText}`);
+  }
+  return res.blob();
+}
+
+/** Sync single-customer export — the .xlsx workbook (masked per role). */
+export function exportCustomer(getToken: TokenGetter, id: string): Promise<Blob> {
+  return requestBlob(getToken, `${API_ROUTES.customers}/${id}/export`);
+}
+export function exportCustomerAsync(getToken: TokenGetter, id: string): Promise<ExportAsyncResponse> {
+  return request(getToken, `${API_ROUTES.customers}/${id}/export/async`, ExportAsyncResponseSchema, { method: 'POST' });
+}
+export function getExportStatus(getToken: TokenGetter, jobId: string): Promise<ExportStatusResponse> {
+  return request(getToken, `${API_ROUTES.customers}/exports/${jobId}/status`, ExportStatusResponseSchema);
+}
+export function downloadExport(getToken: TokenGetter, jobId: string): Promise<Blob> {
+  return requestBlob(getToken, `${API_ROUTES.customers}/exports/${jobId}/download`);
 }

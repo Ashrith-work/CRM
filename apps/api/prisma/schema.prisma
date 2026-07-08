@@ -68,6 +68,11 @@ model Organization {
   commerceEvents    CommerceEvent[]
   webhookDeliveries WebhookDelivery[]
 
+  // M2 — Customer 360 (timeline pointer + denormalized features + export audit).
+  interactions       Interaction[]
+  customerFeatures   CustomerFeatures[]
+  experienceExports  ExperienceExport[]
+
   @@index([slug])
 }
 
@@ -280,6 +285,83 @@ model WebhookDelivery {
 
   @@unique([organizationId, provider, eventId])
   @@index([organizationId, provider, createdAt])
+}
+
+// ============================================================================
+// Milestone 2 — Customer 360. Interaction is a DENORMALIZED timeline pointer so
+// the 360 timeline is ONE indexed query. CustomerFeatures denormalizes per-
+// customer aggregates (+ placeholder RFM/CLV filled in M3) so the list + badges
+// + fast profile avoid live aggregation. ExperienceExport audits every export.
+// ============================================================================
+
+enum InteractionType {
+  ORDER
+  EVENT
+  MESSAGE
+  CALL
+  TICKET
+  NOTE
+  RETURN
+}
+
+model Interaction {
+  id             String          @id @default(cuid())
+  organizationId String
+  customerId     String
+  type           InteractionType
+  /** Source row id (order id / event id / …). */
+  refId          String
+  summary        String?
+  occurredAt     DateTime
+  createdAt      DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // The 360 timeline reads this in one indexed query (newest-first, type filter).
+  @@index([organizationId, customerId, occurredAt])
+  @@index([organizationId, customerId, type, occurredAt])
+  @@unique([organizationId, type, refId])
+}
+
+model CustomerFeatures {
+  id             String    @id @default(cuid())
+  organizationId String
+  customerId     String
+  // Denormalized aggregates (net of refunds), maintained on ingest.
+  netRevenueMinor    Int      @default(0)
+  orderCount         Int      @default(0)
+  firstOrderAt       DateTime?
+  lastOrderAt        DateTime?
+  avgOrderValueMinor Int      @default(0)
+  currency           String?
+  // Placeholders — populated by M3 analytics.
+  rfmScore      String?
+  clvMinor      Int?
+  churnRisk     Float?
+  apparelSize   String?
+  fit           String?
+  styleAffinity String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, customerId])
+  @@index([organizationId, netRevenueMinor])
+  @@index([organizationId, lastOrderAt])
+}
+
+model ExperienceExport {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorUserId    String
+  customerId     String?
+  masked         Boolean
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
 }
 
 model User {

@@ -120,7 +120,54 @@ export class CommerceIngestService {
     if (!existed) {
       await this.event(organizationId, customerId, 'ORDER_PLACED', o.externalId, o.placedAt, { totalMinor: o.totalMinor });
     }
+
+    // Customer 360 maintenance: timeline pointer + denormalized features.
+    if (customerId) {
+      await this.recordOrderInteraction(organizationId, customerId, o);
+      await this.recomputeFeatures(organizationId, customerId);
+    }
     return order.id;
+  }
+
+  /** Upsert the ORDER Interaction (timeline pointer) — idempotent on (org, type, refId). */
+  async recordOrderInteraction(organizationId: string, customerId: string, o: MappedOrder): Promise<void> {
+    const summary = `Order #${o.orderNumber ?? o.externalId} · ${moneyLabel(o.totalMinor, o.currency)} · ${o.financialStatus.toLowerCase()}`;
+    await this.prisma.interaction.upsert({
+      where: { organizationId_type_refId: { organizationId, type: 'ORDER', refId: o.externalId } },
+      update: { customerId, summary, occurredAt: o.placedAt },
+      create: { organizationId, customerId, type: 'ORDER', refId: o.externalId, summary, occurredAt: o.placedAt },
+    });
+  }
+
+  /** Recompute the denormalized per-customer aggregates (net of refunds). */
+  async recomputeFeatures(organizationId: string, customerId: string): Promise<void> {
+    const agg = await this.prisma.order.aggregate({
+      where: { organizationId, customerId, deletedAt: null },
+      _count: { _all: true },
+      _sum: { totalMinor: true, refundedMinor: true },
+      _min: { placedAt: true },
+      _max: { placedAt: true },
+    });
+    const orderCount = agg._count._all;
+    const netRevenueMinor = (agg._sum.totalMinor ?? 0) - (agg._sum.refundedMinor ?? 0);
+    const latest = await this.prisma.order.findFirst({
+      where: { organizationId, customerId, deletedAt: null },
+      orderBy: { placedAt: 'desc' },
+      select: { currency: true },
+    });
+    const data = {
+      netRevenueMinor,
+      orderCount,
+      firstOrderAt: agg._min.placedAt,
+      lastOrderAt: agg._max.placedAt,
+      avgOrderValueMinor: orderCount ? Math.round(netRevenueMinor / orderCount) : 0,
+      currency: latest?.currency ?? null,
+    };
+    await this.prisma.customerFeatures.upsert({
+      where: { organizationId_customerId: { organizationId, customerId } },
+      update: data,
+      create: { organizationId, customerId, ...data },
+    });
   }
 
   async upsertCart(organizationId: string, c: MappedCheckout): Promise<string> {
@@ -263,5 +310,20 @@ export class CommerceIngestService {
     await this.prisma.commerceEvent.create({
       data: { organizationId, customerId, type, externalId, occurredAt, metadata: metadata as Prisma.InputJsonValue },
     });
+
+    // A checkout also lands on the 360 timeline as an EVENT interaction.
+    if (customerId && type === 'CHECKOUT_STARTED') {
+      await this.prisma.interaction.upsert({
+        where: { organizationId_type_refId: { organizationId, type: 'EVENT', refId: externalId } },
+        update: { customerId, summary: 'Checkout started', occurredAt },
+        create: { organizationId, customerId, type: 'EVENT', refId: externalId, summary: 'Checkout started', occurredAt },
+      });
+    }
   }
+}
+
+/** Short money label for interaction summaries (₹ for INR, else "CUR 12.34"). */
+function moneyLabel(minor: number, currency: string): string {
+  const major = (minor / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return currency === 'INR' ? `₹${major}` : `${currency} ${major}`;
 }

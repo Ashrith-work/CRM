@@ -58,9 +58,11 @@ export const PERMISSIONS = {
   INTEGRATION_READ: 'integration:read',
   INTEGRATION_MANAGE: 'integration:manage',
 
-  // M1 commerce — Shopify ingestion + identity (admin-only).
+  // M1 commerce — Shopify ingestion + identity.
   COMMERCE_READ: 'commerce:read',
   COMMERCE_MANAGE: 'commerce:manage',
+  // M2 — unmasked PII (customer email/phone + unmasked exports). Admin/owner only.
+  PII_READ: 'pii:read',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -123,9 +125,11 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // Integrations (Configure) — admins connect/disconnect.
     PERMISSIONS.INTEGRATION_READ,
     PERMISSIONS.INTEGRATION_MANAGE,
-    // Commerce ingestion + identity merge (admin-only).
+    // Commerce ingestion + identity merge (admin).
     PERMISSIONS.COMMERCE_READ,
     PERMISSIONS.COMMERCE_MANAGE,
+    // Admin sees unmasked PII + unmasked exports.
+    PERMISSIONS.PII_READ,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -153,5 +157,7 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.CONSENT_MANAGE,
     // Reps can VIEW integrations but not connect/disconnect (proves the 403 path).
     PERMISSIONS.INTEGRATION_READ,
+    // Reps can view Customer 360 + export, but PII is MASKED (no pii:read).
+    PERMISSIONS.COMMERCE_READ,
   ],
 };

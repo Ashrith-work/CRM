@@ -745,6 +745,75 @@ async function seedPrimaryOrg(): Promise<void> {
   await prisma.orderItem.createMany({ data: orderItemRows });
   bump('orders', orderRows.length);
   bump('orderItems', orderItemRows.length);
+
+  // ----- Customer 360: Interaction pointers + denormalized CustomerFeatures --
+  const interactionRows: Prisma.InteractionCreateManyInput[] = orderRows.map((o) => ({
+    id: mkId('itx'),
+    organizationId: org.id,
+    customerId: o.customerId!,
+    type: 'ORDER',
+    refId: o.externalId!,
+    summary: `Order #${o.orderNumber} · ₹${((o.totalMinor as number) / 100).toFixed(2)} · ${String(o.financialStatus).toLowerCase()}`,
+    occurredAt: o.placedAt as Date,
+    createdAt: o.placedAt as Date,
+  }));
+  await prisma.interaction.createMany({ data: interactionRows });
+  bump('interactions', interactionRows.length);
+
+  const featByCust = new Map<string, { net: number; count: number; first: Date; last: Date }>();
+  for (const o of orderRows) {
+    const cid = o.customerId!;
+    const net = (o.totalMinor as number) - ((o.refundedMinor as number) ?? 0);
+    const placed = o.placedAt as Date;
+    const f = featByCust.get(cid) ?? { net: 0, count: 0, first: placed, last: placed };
+    f.net += net;
+    f.count += 1;
+    if (placed < f.first) f.first = placed;
+    if (placed > f.last) f.last = placed;
+    featByCust.set(cid, f);
+  }
+  const featureRows: Prisma.CustomerFeaturesCreateManyInput[] = [...featByCust.entries()].map(([customerId, f]) => ({
+    id: mkId('cf'),
+    organizationId: org.id,
+    customerId,
+    netRevenueMinor: f.net,
+    orderCount: f.count,
+    firstOrderAt: f.first,
+    lastOrderAt: f.last,
+    avgOrderValueMinor: Math.round(f.net / f.count),
+    currency: 'INR',
+  }));
+  await prisma.customerFeatures.createMany({ data: featureRows });
+  bump('customerFeatures', featureRows.length);
+
+  // Optional perf seed: SEED_COMMERCE_CUSTOMERS=100000 bulk-inserts customers +
+  // features + one timeline interaction each (for the Customer-360 P95 test).
+  const bulk = Number(process.env.SEED_COMMERCE_CUSTOMERS ?? 0);
+  if (bulk > 0) {
+    console.log(`  c360:   bulk-inserting ${bulk} customers (+features +interaction) for perf…`);
+    const BATCH = 5000;
+    for (let start = 0; start < bulk; start += BATCH) {
+      const end = Math.min(start + BATCH, bulk);
+      const custs: Prisma.CustomerCreateManyInput[] = [];
+      const feats: Prisma.CustomerFeaturesCreateManyInput[] = [];
+      const itxs: Prisma.InteractionCreateManyInput[] = [];
+      for (let i = start; i < end; i++) {
+        const cid = `bulkcust_${i}`;
+        const placed = new Date(HISTORY_START.getTime() + (i % 300) * 86_400_000);
+        const net = 50_000 + (i % 50) * 10_000;
+        custs.push({ id: cid, organizationId: org.id, externalId: `shp_bulk_${i}`, email: `bulk${i}@nerige.example`, firstName: 'Bulk', lastName: `Buyer${i}`, createdAt: placed, updatedAt: placed });
+        feats.push({ id: `bulkf_${i}`, organizationId: org.id, customerId: cid, netRevenueMinor: net, orderCount: 1 + (i % 5), firstOrderAt: placed, lastOrderAt: placed, avgOrderValueMinor: net, currency: 'INR' });
+        itxs.push({ id: `bulki_${i}`, organizationId: org.id, customerId: cid, type: 'ORDER', refId: `shp_bulkorder_${i}`, summary: `Order #${9_000_000 + i} · ₹${(net / 100).toFixed(2)} · paid`, occurredAt: placed, createdAt: placed });
+      }
+      await prisma.customer.createMany({ data: custs, skipDuplicates: true });
+      await prisma.customerFeatures.createMany({ data: feats, skipDuplicates: true });
+      await prisma.interaction.createMany({ data: itxs, skipDuplicates: true });
+    }
+    bump('customers', bulk);
+    bump('customerFeatures', bulk);
+    bump('interactions', bulk);
+    console.log(`  c360:   bulk perf seed done (${bulk})`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -797,6 +866,10 @@ async function seedSecondOrg(): Promise<void> {
 // Re-run: clear seeded tables (children first, FK-safe).
 // ---------------------------------------------------------------------------
 async function clearAll(): Promise<void> {
+  // M2 Customer 360.
+  await prisma.interaction.deleteMany();
+  await prisma.customerFeatures.deleteMany();
+  await prisma.experienceExport.deleteMany();
   // M1 commerce (children first).
   await prisma.orderItem.deleteMany();
   await prisma.cartItem.deleteMany();
