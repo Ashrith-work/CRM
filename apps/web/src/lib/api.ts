@@ -1,5 +1,15 @@
 import {
   API_ROUTES,
+  RevenueTrendResponseSchema,
+  CohortResponseSchema,
+  ClvDistributionResponseSchema,
+  ChurnWatchlistResponseSchema,
+  MarginResponseSchema,
+  type RevenueTrendResponse,
+  type CohortResponse,
+  type ClvDistributionResponse,
+  type ChurnWatchlistResponse,
+  type MarginResponse,
   MeResponseSchema,
   ActivityListResponseSchema,
   CompanyListResponseSchema,
@@ -715,6 +725,23 @@ export function getAnalyticsSummary(getToken: TokenGetter): Promise<AnalyticsSum
 }
 export function refreshAnalytics(getToken: TokenGetter): Promise<{ refreshed: number }> {
   return request(getToken, `${API_ROUTES.analytics}/refresh`, z.object({ refreshed: z.number() }), { method: 'POST' });
+}
+
+// P2.1 deep analytics (view-backed).
+export function getRevenueTrend(getToken: TokenGetter): Promise<RevenueTrendResponse> {
+  return request(getToken, `${API_ROUTES.analytics}/revenue-trend`, RevenueTrendResponseSchema);
+}
+export function getCohorts(getToken: TokenGetter): Promise<CohortResponse> {
+  return request(getToken, `${API_ROUTES.analytics}/cohorts`, CohortResponseSchema);
+}
+export function getClvDistribution(getToken: TokenGetter): Promise<ClvDistributionResponse> {
+  return request(getToken, `${API_ROUTES.analytics}/clv-distribution`, ClvDistributionResponseSchema);
+}
+export function getChurnWatchlist(getToken: TokenGetter): Promise<ChurnWatchlistResponse> {
+  return request(getToken, `${API_ROUTES.analytics}/churn-watchlist`, ChurnWatchlistResponseSchema);
+}
+export function getMargin(getToken: TokenGetter): Promise<MarginResponse> {
+  return request(getToken, `${API_ROUTES.analytics}/margin`, MarginResponseSchema);
 }
 
 export function previewSegment(getToken: TokenGetter, rules: RuleGroup): Promise<SegmentPreviewResponse> {

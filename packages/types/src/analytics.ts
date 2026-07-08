@@ -45,6 +45,57 @@ export const AnalyticsSummarySchema = z.object({
 export type AnalyticsSummary = z.infer<typeof AnalyticsSummarySchema>;
 
 // ---------------------------------------------------------------------------
+// P2.1 deep analytics — revenue / cohorts / CLV / churn / margin (view-backed).
+// ---------------------------------------------------------------------------
+export const RevenueTrendPointSchema = z.object({ day: z.string(), netRevenueMinor: z.number().int(), orderCount: z.number().int() });
+export type RevenueTrendPoint = z.infer<typeof RevenueTrendPointSchema>;
+export const RevenueTrendResponseSchema = z.object({ currency: z.string().nullable(), data: z.array(RevenueTrendPointSchema) });
+export type RevenueTrendResponse = z.infer<typeof RevenueTrendResponseSchema>;
+
+export const CohortCellSchema = z.object({ periodNumber: z.number().int(), activeCustomers: z.number().int(), retentionPct: z.number() });
+export type CohortCell = z.infer<typeof CohortCellSchema>;
+export const CohortRowSchema = z.object({ cohortMonth: z.string(), cohortSize: z.number().int(), cells: z.array(CohortCellSchema) });
+export type CohortRow = z.infer<typeof CohortRowSchema>;
+export const CohortResponseSchema = z.object({ maxPeriod: z.number().int(), data: z.array(CohortRowSchema) });
+export type CohortResponse = z.infer<typeof CohortResponseSchema>;
+
+export const ClvBandSchema = z.enum(['High', 'Mid', 'Low']);
+export type ClvBand = z.infer<typeof ClvBandSchema>;
+export const ClvDistributionRowSchema = z.object({ band: ClvBandSchema, customers: z.number().int(), totalMinor: z.number().int(), minMinor: z.number().int(), maxMinor: z.number().int() });
+export type ClvDistributionRow = z.infer<typeof ClvDistributionRowSchema>;
+export const ClvDistributionResponseSchema = z.object({ currency: z.string().nullable(), data: z.array(ClvDistributionRowSchema) });
+export type ClvDistributionResponse = z.infer<typeof ClvDistributionResponseSchema>;
+
+export const CHURN_BANDS = ['Low', 'Medium', 'High', 'Unknown'] as const;
+export const ChurnBandSchema = z.enum(CHURN_BANDS);
+export type ChurnBand = z.infer<typeof ChurnBandSchema>;
+export const ChurnWatchRowSchema = z.object({
+  customerId: z.string(),
+  name: z.string(),
+  email: z.string().nullable(),
+  churnBand: ChurnBandSchema,
+  churnRisk: z.number().nullable(),
+  clvBand: z.string().nullable(),
+  clvMinor: z.number().int(),
+  daysSinceLast: z.number().int().nullable(),
+});
+export type ChurnWatchRow = z.infer<typeof ChurnWatchRowSchema>;
+export const ChurnWatchlistResponseSchema = z.object({ currency: z.string().nullable(), data: z.array(ChurnWatchRowSchema) });
+export type ChurnWatchlistResponse = z.infer<typeof ChurnWatchlistResponseSchema>;
+
+export const MarginPointSchema = z.object({ day: z.string(), netRevenueMinor: z.number().int(), cogsMinor: z.number().int(), marginMinor: z.number().int() });
+export type MarginPoint = z.infer<typeof MarginPointSchema>;
+export const MarginResponseSchema = z.object({
+  isEstimate: z.boolean(),
+  /** Human label — "Estimated margin (excludes COGS)" when isEstimate. */
+  label: z.string(),
+  currency: z.string().nullable(),
+  totalMarginMinor: z.number().int(),
+  data: z.array(MarginPointSchema),
+});
+export type MarginResponse = z.infer<typeof MarginResponseSchema>;
+
+// ---------------------------------------------------------------------------
 // Segment rule tree (whitelisted fields + ops; translated to a SAFE query).
 // ---------------------------------------------------------------------------
 export const SEGMENT_FIELDS = [
@@ -54,6 +105,7 @@ export const SEGMENT_FIELDS = [
   'netRevenueMinor',
   'aovMinor',
   'clvBand',
+  'churnBand',
   'rScore',
   'fScore',
   'mScore',
