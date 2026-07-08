@@ -61,6 +61,11 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @crm/api db:generate
 
+      # Build shared types first so @crm/types/dist exists before the seed +
+      # migrate steps (the seed imports @crm/types at runtime via tsx).
+      - name: Build shared types
+        run: pnpm --filter @crm/types build
+
       - name: Apply database migrations
         run: pnpm --filter @crm/api db:migrate:deploy
 
