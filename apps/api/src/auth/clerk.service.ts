@@ -1,5 +1,5 @@
-import { verifyToken } from '@clerk/backend';
-import { Injectable } from '@nestjs/common';
+import { verifyToken, createClerkClient, type ClerkClient } from '@clerk/backend';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
 import type { ClerkClaims } from './auth.types';
@@ -23,7 +23,24 @@ export class TokenVerificationFailure extends Error {
  */
 @Injectable()
 export class ClerkService {
+  private readonly logger = new Logger(ClerkService.name);
+  private client?: ClerkClient;
+
   constructor(private readonly config: ConfigService<Env, true>) {}
+
+  /** The signed-in user's primary email (lowercased), or null — used to bind a
+   * Clerk account to a seeded user when the clerkUserId isn't known yet. */
+  async getUserEmail(clerkUserId: string): Promise<string | null> {
+    try {
+      this.client ??= createClerkClient({ secretKey: this.config.get('CLERK_SECRET_KEY', { infer: true }) });
+      const user = await this.client.users.getUser(clerkUserId);
+      const primary = user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId) ?? user.emailAddresses[0];
+      return primary?.emailAddress?.toLowerCase() ?? null;
+    } catch (err) {
+      this.logger.warn(`Could not fetch Clerk email for ${clerkUserId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
 
   async verifyToken(token: string): Promise<ClerkClaims> {
     try {

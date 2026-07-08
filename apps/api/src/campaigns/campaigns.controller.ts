@@ -1,5 +1,5 @@
 import { Controller, Get, Header, HttpCode, Param, Post, Query } from '@nestjs/common';
-import { PERMISSIONS, type Campaign, type CampaignListResponse, type EnrollmentListResponse, type RecoveryStats } from '@crm/types';
+import { PERMISSIONS, type CampaignListResponse, type EnrollmentListResponse, type RecoveryStats } from '@crm/types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { UserContext } from '../auth/auth.types';
 import { RequirePermission } from '../rbac/require-permission.decorator';
