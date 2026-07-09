@@ -45,7 +45,8 @@ export class MyOperatorWebhookController {
     if (!this.myoperator.webhookSecretConfigured()) {
       this.logger.warn('MYOPERATOR_WEBHOOK_SECRET not set — accepting webhook unverified (dev only)');
     }
-    const result = await this.calls.processWebhook(body);
+    // Parse with THIS provider's adapter, then process (provider-agnostic).
+    const result = await this.calls.processWebhookEvent(this.myoperator.parseEvent(body));
     return { received: true, callId: result.callId };
   }
 }

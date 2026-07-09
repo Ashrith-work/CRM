@@ -18,6 +18,8 @@ model Organization {
   slug       String   @unique
   // Milestone 5 — maps an inbound MyOperator webhook (its company id) to this org.
   myoperatorCompanyId String? @unique
+  // Maps an inbound Exotel webhook (its account SID) to this org.
+  exotelAccountSid    String? @unique
   // P2.1 analytics — IANA tz for revenue/cohort day-bucketing; hasCogs governs
   // whether contribution margin is real (COGS) or a labelled estimate.
   timezone   String   @default("Asia/Kolkata")

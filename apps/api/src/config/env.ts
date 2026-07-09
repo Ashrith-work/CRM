@@ -31,7 +31,21 @@ const envSchema = z.object({
   /** Optional Expo access token for authenticated push (recommended in prod). */
   EXPO_ACCESS_TOKEN: z.string().optional(),
 
-  // Milestone 5 — telephony (MyOperator) + recording storage (Cloudinary).
+  // Milestone 5 — telephony + recording storage (Cloudinary). The active provider
+  // is swap-able: 'myoperator' (default) or 'exotel'. Each provider's webhook
+  // route parses with its own adapter; the active one does outbound + downloads.
+  TELEPHONY_PROVIDER: z.enum(['myoperator', 'exotel']).default('myoperator'),
+
+  // Exotel — unset ⇒ MOCK mode (no real dialing). Click-to-call uses HTTP Basic
+  // auth (EXOTEL_API_KEY:EXOTEL_API_TOKEN); org mapping via EXOTEL_ACCOUNT_SID.
+  EXOTEL_API_URL: z.string().default('https://api.exotel.com'),
+  EXOTEL_ACCOUNT_SID: z.string().optional(),
+  EXOTEL_API_KEY: z.string().optional(),
+  EXOTEL_API_TOKEN: z.string().optional(),
+  EXOTEL_CALLER_ID: z.string().optional(),
+  /** Optional HMAC secret for webhook verification (Exotel usually uses URL basic-auth). */
+  EXOTEL_WEBHOOK_SECRET: z.string().optional(),
+
   MYOPERATOR_API_URL: z.string().default('https://obd-api.myoperator.co'),
   /** When unset, the adapter runs in MOCK mode (generates ids; no real dialing). */
   MYOPERATOR_API_TOKEN: z.string().optional(),

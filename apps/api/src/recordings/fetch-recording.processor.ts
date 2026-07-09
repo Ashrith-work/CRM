@@ -1,9 +1,9 @@
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { MyOperatorService } from '../telephony/myoperator.service';
+import { TELEPHONY_PROVIDER, type TelephonyProvider } from '../telephony/telephony.provider';
 import { ConsentGate } from '../consents/consent-gate.service';
 import type { Env } from '../config/env';
 import { CloudinaryService } from './cloudinary.service';
@@ -23,7 +23,7 @@ export class FetchRecordingProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<Env, true>,
-    private readonly myoperator: MyOperatorService,
+    @Inject(TELEPHONY_PROVIDER) private readonly provider: TelephonyProvider,
     private readonly cloudinary: CloudinaryService,
     private readonly gate: ConsentGate,
   ) {
@@ -50,7 +50,7 @@ export class FetchRecordingProcessor extends WorkerHost {
 
     try {
       await this.prisma.call.update({ where: { id: call.id }, data: { recordingStatus: 'PENDING' } });
-      const download = await this.myoperator.downloadRecording(call.recordingSourceUrl);
+      const download = await this.provider.downloadRecording(call.recordingSourceUrl);
 
       const maxBytes = this.config.get('RECORDING_MAX_BYTES', { infer: true });
       if (download.sizeBytes > maxBytes) {

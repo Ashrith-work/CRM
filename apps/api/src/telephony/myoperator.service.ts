@@ -1,50 +1,34 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { CallDirection, CallStatus, MyOperatorWebhook } from '@crm/types';
+import type { MyOperatorWebhook } from '@crm/types';
 import type { Env } from '../config/env';
+import { mapDirection, mapStatus, parseTime } from './normalize.util';
+import type { ClickToCallParams, DownloadedRecording, NormalizedCallEvent, TelephonyProvider } from './telephony.provider';
 
-export interface ClickToCallParams {
-  agentNumber: string;
-  customerNumber: string;
-}
-
-/** A MyOperator webhook mapped to our normalized call event shape. */
-export interface NormalizedCallEvent {
-  externalCallId: string | null;
-  companyId: string | null;
-  direction: CallDirection;
-  status: CallStatus;
-  fromNumber: string | null;
-  toNumber: string | null;
-  agentNumber: string | null;
-  startedAt: Date | null;
-  answeredAt: Date | null;
-  endedAt: Date | null;
-  durationSeconds: number | null;
-  recordingUrl: string | null;
-}
-
-export interface DownloadedRecording {
-  buffer: Buffer;
-  contentType: string;
-  sizeBytes: number;
-}
+// Re-export the shared shapes so existing importers of this module keep working.
+export type { ClickToCallParams, DownloadedRecording, NormalizedCallEvent } from './telephony.provider';
+export { mapStatus } from './normalize.util';
 
 /**
- * MyOperator adapter. Isolates all provider specifics: initiating click-to-call,
- * verifying webhook authenticity, mapping the raw event to our shape, and
- * downloading recordings. Runs in MOCK mode (no MYOPERATOR_API_TOKEN) so the
- * whole flow works locally without real telephony credentials.
+ * MyOperator adapter (implements TelephonyProvider). Isolates all provider
+ * specifics: click-to-call, webhook authenticity, event mapping, and recording
+ * download. Runs in MOCK mode (no MYOPERATOR_API_TOKEN) so the whole flow works
+ * locally without real telephony credentials.
  */
 @Injectable()
-export class MyOperatorService {
+export class MyOperatorService implements TelephonyProvider {
+  readonly id = 'myoperator' as const;
   private readonly logger = new Logger(MyOperatorService.name);
 
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   isMock(): boolean {
     return !this.config.get('MYOPERATOR_API_TOKEN', { infer: true });
+  }
+
+  callerId(): string | null {
+    return this.config.get('MYOPERATOR_CALLER_ID', { infer: true }) ?? null;
   }
 
   /** Initiate an outbound call connecting the agent to the customer. */
@@ -94,7 +78,8 @@ export class MyOperatorService {
   }
 
   /** Map a raw MyOperator webhook to our normalized event. */
-  parseEvent(payload: MyOperatorWebhook): NormalizedCallEvent {
+  parseEvent(raw: unknown): NormalizedCallEvent {
+    const payload = raw as MyOperatorWebhook;
     const duration = payload.duration != null ? Number(payload.duration) : null;
     return {
       externalCallId: payload.call_id ?? payload.uuid ?? null,
@@ -126,34 +111,4 @@ export class MyOperatorService {
       sizeBytes: buffer.byteLength,
     };
   }
-}
-
-function mapDirection(raw: string | undefined): CallDirection {
-  return (raw ?? '').toLowerCase().startsWith('in') ? 'INBOUND' : 'OUTBOUND';
-}
-
-/** Map a provider status/event string (+duration hint) to our CallStatus. */
-export function mapStatus(raw: string | undefined, duration: number | null): CallStatus {
-  const s = (raw ?? '').toLowerCase();
-  if (/(answered|complete|success)/.test(s)) return 'COMPLETED';
-  if (/(missed)/.test(s)) return 'MISSED';
-  if (/(no[-_ ]?answer|noanswer)/.test(s)) return 'NO_ANSWER';
-  if (/(fail|busy|reject|declin)/.test(s)) return 'FAILED';
-  if (/(ring)/.test(s)) return 'RINGING';
-  if (/(progress|ongoing|answer)/.test(s)) return 'IN_PROGRESS';
-  // No/unknown status: infer from duration.
-  if (duration != null) return duration > 0 ? 'COMPLETED' : 'MISSED';
-  return 'RINGING';
-}
-
-function parseTime(raw: string | undefined): Date | null {
-  if (!raw) return null;
-  // Epoch seconds/millis?
-  if (/^\d+$/.test(raw)) {
-    const n = Number(raw);
-    const d = new Date(n < 1e12 ? n * 1000 : n);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  const d = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z');
-  return isNaN(d.getTime()) ? null : d;
 }

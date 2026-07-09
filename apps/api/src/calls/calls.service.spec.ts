@@ -34,7 +34,7 @@ function makeService(opts: {
     opts.upsertReturn ?? { id: 'call1', organizationId: 'org1', contactId: null, agentUserId: null, direction: 'INBOUND', status: 'COMPLETED', durationSeconds: 175 },
   );
   const prisma = {
-    organization: { findUnique: jest.fn().mockResolvedValue({ id: 'org1' }) },
+    organization: { findFirst: jest.fn().mockResolvedValue({ id: 'org1' }) },
     call: {
       findUnique: opts.findUnique ?? jest.fn().mockResolvedValue(null),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -100,7 +100,7 @@ describe('CallsService.processWebhook', () => {
 
   it('ignores an event with no external call id', async () => {
     const { service, upsert } = makeService({});
-    (service as unknown as { myoperator: MyOperatorService }).myoperator.parseEvent = jest
+    (service as unknown as { provider: { parseEvent: jest.Mock } }).provider.parseEvent = jest
       .fn()
       .mockReturnValue(event({ externalCallId: null }));
     const res = await service.processWebhook({});

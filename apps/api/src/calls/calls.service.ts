@@ -1,11 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
   Call as CallDto,
   CallListQueryInput,
   ClickToCallInput,
   LogCallInput,
-  MyOperatorWebhook,
   RecordingUrlResponse,
   UpdateCallInput,
 } from '@crm/types';
@@ -13,7 +12,7 @@ import { Prisma, type ActivityEventType, type Call as CallRow, type CallStatus }
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConsentService } from '../consents/consent.service';
-import { MyOperatorService } from '../telephony/myoperator.service';
+import { TELEPHONY_PROVIDER, type NormalizedCallEvent, type TelephonyProvider } from '../telephony/telephony.provider';
 import { RecordingsService } from '../recordings/recordings.service';
 import { resolveActors } from '../common/actors.util';
 import { matchContactByNumber, nationalNumber, normalizeE164 } from '../common/phone.util';
@@ -30,7 +29,7 @@ export class CallsService {
     private readonly config: ConfigService<Env, true>,
     private readonly activity: ActivityService,
     private readonly consents: ConsentService,
-    private readonly myoperator: MyOperatorService,
+    @Inject(TELEPHONY_PROVIDER) private readonly provider: TelephonyProvider,
     private readonly recordings: RecordingsService,
   ) {}
 
@@ -45,8 +44,8 @@ export class CallsService {
     if (!customer) throw new BadRequestException('Contact has no phone number to dial');
     if (input.dealId) await this.assertDeal(organizationId, input.dealId);
 
-    const agentNumber = this.config.get('MYOPERATOR_CALLER_ID', { infer: true }) ?? 'agent';
-    const { externalCallId } = await this.myoperator.clickToCall({ agentNumber, customerNumber: customer });
+    const agentNumber = this.provider.callerId() ?? 'agent';
+    const { externalCallId } = await this.provider.clickToCall({ agentNumber, customerNumber: customer });
 
     const call = await this.prisma.call.create({
       data: {
@@ -101,8 +100,17 @@ export class CallsService {
 
   // ----- Webhook (public, verified upstream) ------------------------------
   /** Idempotent on (organizationId, externalCallId): a retried event upserts one Call. */
-  async processWebhook(payload: MyOperatorWebhook): Promise<{ callId: string | null; created: boolean }> {
-    const event = this.myoperator.parseEvent(payload);
+  /** Parse a raw payload with the ACTIVE provider, then process (compat shim). */
+  async processWebhook(payload: unknown): Promise<{ callId: string | null; created: boolean }> {
+    return this.processWebhookEvent(this.provider.parseEvent(payload));
+  }
+
+  /**
+   * Process an already-normalized call event (each provider's webhook route
+   * parses with its own adapter). Idempotent on the (org, externalCallId) unique
+   * key — a retried event yields exactly one Call.
+   */
+  async processWebhookEvent(event: NormalizedCallEvent): Promise<{ callId: string | null; created: boolean }> {
     if (!event.externalCallId) {
       this.logger.warn('Webhook without a call id — ignored');
       return { callId: null, created: false };
@@ -258,7 +266,11 @@ export class CallsService {
   // ----- Helpers ----------------------------------------------------------
   private async resolveOrg(companyId: string | null, externalCallId: string): Promise<string | null> {
     if (companyId) {
-      const org = await this.prisma.organization.findUnique({ where: { myoperatorCompanyId: companyId }, select: { id: true } });
+      // Map by the provider's account id (MyOperator company id OR Exotel SID).
+      const org = await this.prisma.organization.findFirst({
+        where: { OR: [{ myoperatorCompanyId: companyId }, { exotelAccountSid: companyId }] },
+        select: { id: true },
+      });
       if (org) return org.id;
     }
     // Fall back to an existing call created by click-to-call.
