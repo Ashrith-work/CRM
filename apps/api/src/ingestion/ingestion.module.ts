@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { CustomersModule } from '../customers/customers.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
+import { IncentivesModule } from '../incentives/incentives.module';
 import { ShopifyService } from './shopify.service';
 import { CommerceIngestService } from './commerce-ingest.service';
 import { MarketingConsentWriter } from './marketing-consent.writer';
@@ -16,7 +18,7 @@ import { SHOPIFY_SYNC_QUEUE } from './commerce.constants';
  * shared upsert path.
  */
 @Module({
-  imports: [CustomersModule, BullModule.registerQueue({ name: SHOPIFY_SYNC_QUEUE })],
+  imports: [CustomersModule, LoyaltyModule, IncentivesModule, BullModule.registerQueue({ name: SHOPIFY_SYNC_QUEUE })],
   controllers: [IngestionController, ShopifyWebhookController],
   providers: [ShopifyService, CommerceIngestService, IngestionService, SyncProcessor, MarketingConsentWriter],
   exports: [IngestionService],

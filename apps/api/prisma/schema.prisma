@@ -100,6 +100,10 @@ model Organization {
   adLeads       AdLead[]
   audienceSyncs AudienceSync[]
 
+  // Loyalty ledger + incentives.
+  loyaltyTransactions LoyaltyTransaction[]
+  incentives          Incentive[]
+
   @@index([slug])
 }
 
@@ -1550,4 +1554,88 @@ model AudienceSync {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, segmentId])
+}
+
+// ============================================================================
+// Loyalty ledger + threshold incentive engine.
+// ============================================================================
+
+/** Ledger reasons. EARN/CLAWBACK correct an order's earned points (the ledger
+ * converges to floor(net ÷ divisor)); BURN spends points; ADJUST is manual. */
+enum LoyaltyReason {
+  EARN
+  BURN
+  CLAWBACK
+  ADJUST
+}
+
+/**
+ * APPEND-ONLY loyalty ledger. Balance is SUM(delta) — never a mutable field.
+ * Earn on paid/fulfilled orders, burn on redemption, negative CLAWBACK on refund.
+ * Rows are never edited or deleted.
+ */
+model LoyaltyTransaction {
+  id             String        @id @default(cuid())
+  organizationId String
+  customerId     String
+  delta          Int // earn +, burn/clawback −
+  reason         LoyaltyReason
+  refOrderId     String? // the order this earn/clawback/burn relates to
+  note           String?
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, customerId, createdAt])
+  @@index([organizationId, refOrderId])
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED_AMOUNT
+}
+
+enum IncentiveStatus {
+  ACTIVE
+  REDEEMED
+  EXPIRED
+}
+
+/**
+ * A threshold-triggered store discount. The VALUE is capped (maxValueMinor, not
+ * just a %), low-margin SKUs are excluded, a minimum next-order value is set, and
+ * a validity window bounds it. Redemption is tracked (redeemedOrderId, set once);
+ * a refund of the sourceOrder reverses it. State the numbers before storing.
+ */
+model Incentive {
+  id                String          @id @default(cuid())
+  organizationId    String
+  customerId        String
+  /** { metric: units|orders|distinct_skus, threshold, windowDays? } — precise. */
+  triggerRule       Json
+  discountType      DiscountType    @default(FIXED_AMOUNT)
+  discountValueMinor Int? // FIXED_AMOUNT: the amount off (already capped)
+  discountPercent   Int? // PERCENT: the percentage
+  maxValueMinor     Int // the VALUE cap (paise)
+  minNextOrderMinor Int             @default(0)
+  /** { productExternalIds: string[] } — low-margin SKUs excluded from the code. */
+  excludedSkuRule   Json?
+  /** Loyalty points spent to redeem (0 for free threshold rewards). */
+  pointsCost        Int             @default(0)
+  /** Whether the margin guard was ON when issued (honest audit of exposure). */
+  marginGuard       Boolean         @default(true)
+  discountCode      String?
+  validFrom         DateTime
+  validUntil        DateTime
+  status            IncentiveStatus @default(ACTIVE)
+  sourceOrderId     String? // the qualifying order
+  redeemedOrderId   String? // set once, when a matching order lands
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, customerId])
+  @@index([organizationId, status, validUntil])
+  @@index([organizationId, discountCode])
 }

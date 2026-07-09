@@ -84,6 +84,13 @@ export const PERMISSIONS = {
   // pushing (consented-only) audiences to Meta.
   ADS_READ: 'ads:read',
   ADS_MANAGE: 'ads:manage',
+
+  // Loyalty ledger + incentives. READ views balances/ledger/incentives; MANAGE
+  // burns points (redeem) + issues/evaluates incentives.
+  LOYALTY_READ: 'loyalty:read',
+  LOYALTY_MANAGE: 'loyalty:manage',
+  INCENTIVE_READ: 'incentive:read',
+  INCENTIVE_MANAGE: 'incentive:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -163,6 +170,11 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // Meta ads: admins connect Meta + push audiences; everyone reads below.
     PERMISSIONS.ADS_READ,
     PERMISSIONS.ADS_MANAGE,
+    // Loyalty + incentives: admins redeem points + issue incentives.
+    PERMISSIONS.LOYALTY_READ,
+    PERMISSIONS.LOYALTY_MANAGE,
+    PERMISSIONS.INCENTIVE_READ,
+    PERMISSIONS.INCENTIVE_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -203,5 +215,8 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.AI_QUERY,
     // Reps can view the source-ROI / attribution dashboards (not connect Meta).
     PERMISSIONS.ADS_READ,
+    // Reps can view loyalty balances + incentives (not redeem/issue).
+    PERMISSIONS.LOYALTY_READ,
+    PERMISSIONS.INCENTIVE_READ,
   ],
 };

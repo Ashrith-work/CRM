@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IdentityService } from '../customers/identity.service';
 import { MarketingConsentWriter } from './marketing-consent.writer';
 import { firstTouchSource } from '../attribution/utm.util';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { IncentiveService } from '../incentives/incentive.service';
 import { ShopifyService, type ShopifyConn } from './shopify.service';
 import {
   mapCheckout,
@@ -34,6 +36,8 @@ export class CommerceIngestService {
     private readonly identity: IdentityService,
     private readonly shopify: ShopifyService,
     private readonly marketingConsent: MarketingConsentWriter,
+    private readonly loyalty: LoyaltyService,
+    private readonly incentives: IncentiveService,
   ) {}
 
   // ----- Per-entity upserts (idempotent) ----------------------------------
@@ -158,6 +162,10 @@ export class CommerceIngestService {
       if (o.customer?.acceptsMarketing != null) {
         await this.marketingConsent.recordFromShopify(organizationId, customerId, o.customer.acceptsMarketing);
       }
+      // Loyalty: reconcile earned points to this order's target (idempotent).
+      await this.loyalty.reconcileOrder(organizationId, { externalId: o.externalId, customerId, status: o.status, totalMinor: o.totalMinor, refundedMinor: o.refundedMinor });
+      // Incentives: detect a redemption (order used a code) + evaluate for a new one.
+      await this.incentives.onOrder(organizationId, { externalId: o.externalId, customerId, status: o.status, discountCode: o.discountCode });
     }
     return order.id;
   }
@@ -260,6 +268,13 @@ export class CommerceIngestService {
       where: { id: order.id },
       data: { refundedMinor, financialStatus: recomputeFinancialStatus(order.totalMinor, refundedMinor) },
     });
+
+    // Loyalty clawback: the reconcile writes a negative correcting transaction
+    // for the now-lower net. Incentives: a refund of the qualifying order voids it.
+    if (order.customerId) {
+      await this.loyalty.reconcileOrder(organizationId, { externalId: order.externalId, customerId: order.customerId, status: order.status, totalMinor: order.totalMinor, refundedMinor });
+    }
+    await this.incentives.onRefund(organizationId, order.externalId);
   }
 
   /** Dispatch a webhook payload by topic (same mappers as backfill). */

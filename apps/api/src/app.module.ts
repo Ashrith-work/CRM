@@ -33,6 +33,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { AdsModule } from './ads/ads.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { IncentivesModule } from './incentives/incentives.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -89,6 +91,9 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     AssistantModule,
     // P2.3 — Meta ads + first-touch attribution + consented audience sync.
     AdsModule,
+    // Loyalty ledger + threshold incentive engine.
+    LoyaltyModule,
+    IncentivesModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

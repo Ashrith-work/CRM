@@ -10,6 +10,10 @@ import {
   SourceRoiResponseSchema,
   ReconciliationResponseSchema,
   OrderCoverageResponseSchema,
+  LoyaltyBalanceResponseSchema,
+  LoyaltyLedgerResponseSchema,
+  IncentiveListResponseSchema,
+  IncentiveConfigResponseSchema,
   AdPerformanceResponseSchema,
   AudienceSyncListResponseSchema,
   AudienceSyncSchema,
@@ -18,6 +22,10 @@ import {
   type SourceRoiResponse,
   type ReconciliationResponse,
   type OrderCoverageResponse,
+  type LoyaltyBalanceResponse,
+  type LoyaltyLedgerResponse,
+  type IncentiveListResponse,
+  type IncentiveConfigResponse,
   type AdPerformanceResponse,
   type AudienceSyncListResponse,
   type AudienceSyncDto,
@@ -790,6 +798,24 @@ export function getReconciliation(getToken: TokenGetter): Promise<Reconciliation
 }
 export function getOrderCoverage(getToken: TokenGetter): Promise<OrderCoverageResponse> {
   return request(getToken, `${API_ROUTES.attribution}/order-coverage`, OrderCoverageResponseSchema);
+}
+
+// --- Loyalty ledger + incentives --------------------------------------------
+export function getLoyaltyBalance(getToken: TokenGetter, customerId: string): Promise<LoyaltyBalanceResponse> {
+  return request(getToken, `${API_ROUTES.loyalty}/${customerId}/balance`, LoyaltyBalanceResponseSchema);
+}
+export function getLoyaltyLedger(getToken: TokenGetter, customerId: string): Promise<LoyaltyLedgerResponse> {
+  return request(getToken, `${API_ROUTES.loyalty}/${customerId}/ledger`, LoyaltyLedgerResponseSchema);
+}
+export function redeemPoints(getToken: TokenGetter, customerId: string, points: number, note?: string): Promise<LoyaltyBalanceResponse> {
+  return request(getToken, `${API_ROUTES.loyalty}/${customerId}/redeem`, LoyaltyBalanceResponseSchema, { method: 'POST', body: JSON.stringify({ points, note }) });
+}
+export function listIncentives(getToken: TokenGetter, customerId?: string): Promise<IncentiveListResponse> {
+  const qs = customerId ? `?customerId=${encodeURIComponent(customerId)}` : '';
+  return request(getToken, `${API_ROUTES.incentives}${qs}`, IncentiveListResponseSchema);
+}
+export function getIncentiveConfig(getToken: TokenGetter): Promise<IncentiveConfigResponse> {
+  return request(getToken, `${API_ROUTES.incentives}/config`, IncentiveConfigResponseSchema);
 }
 export function getAdPerformance(getToken: TokenGetter): Promise<AdPerformanceResponse> {
   return request(getToken, `${API_ROUTES.ads}/performance`, AdPerformanceResponseSchema);

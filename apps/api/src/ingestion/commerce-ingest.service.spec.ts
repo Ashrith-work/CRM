@@ -3,8 +3,14 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { IdentityService } from '../customers/identity.service';
 import type { ShopifyService, ShopifyConn } from './shopify.service';
 import type { MarketingConsentWriter } from './marketing-consent.writer';
+import type { LoyaltyService } from '../loyalty/loyalty.service';
+import type { IncentiveService } from '../incentives/incentive.service';
 
 const consent = {} as MarketingConsentWriter;
+// applyRefund/reconcile paths are exercised via spies in these specs, so these
+// stubs only satisfy the constructor arity.
+const loyalty = { reconcileOrder: jest.fn().mockResolvedValue(0) } as unknown as LoyaltyService;
+const incentives = { onOrder: jest.fn().mockResolvedValue(undefined), onRefund: jest.fn().mockResolvedValue(undefined) } as unknown as IncentiveService;
 
 const conn: ShopifyConn = { shopDomain: 'nerige.myshopify.com', accessToken: 't', apiVersion: '2024-10' };
 
@@ -19,7 +25,7 @@ describe('CommerceIngestService.applyRefund', () => {
         delete: del,
       },
     } as unknown as PrismaService;
-    const service = new CommerceIngestService(prisma, {} as IdentityService, {} as ShopifyService, consent);
+    const service = new CommerceIngestService(prisma, {} as IdentityService, {} as ShopifyService, consent, loyalty, incentives);
 
     await service.applyRefund('org1', '555', { transactions: [{ kind: 'refund', status: 'success', amount: '40.00' }] });
 
@@ -33,7 +39,7 @@ describe('CommerceIngestService.applyRefund', () => {
   it('ignores a refund for an unknown order', async () => {
     const update = jest.fn();
     const prisma = { order: { findUnique: jest.fn().mockResolvedValue(null), update } } as unknown as PrismaService;
-    const service = new CommerceIngestService(prisma, {} as IdentityService, {} as ShopifyService, consent);
+    const service = new CommerceIngestService(prisma, {} as IdentityService, {} as ShopifyService, consent, loyalty, incentives);
     await service.applyRefund('org1', 'nope', { transactions: [] });
     expect(update).not.toHaveBeenCalled();
   });
@@ -50,7 +56,7 @@ describe('CommerceIngestService.reconcile (self-heal)', () => {
         return 1;
       }),
     } as unknown as ShopifyService;
-    const service = new CommerceIngestService(prisma, {} as IdentityService, shopify, consent);
+    const service = new CommerceIngestService(prisma, {} as IdentityService, shopify, consent, loyalty, incentives);
     // Isolate the gap-fill loop from the heavy upsert path.
     const upsertOrder = jest.spyOn(service, 'upsertOrder').mockResolvedValue('o999');
 

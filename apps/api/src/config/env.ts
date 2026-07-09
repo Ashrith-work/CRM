@@ -122,6 +122,33 @@ const envSchema = z.object({
   VIP_TIER_VIP_MINOR: z.coerce.number().int().min(0).default(5_000_000), // ₹50,000
   VIP_TIER_GOLD_MINOR: z.coerce.number().int().min(0).default(2_000_000), // ₹20,000
   VIP_TIER_SILVER_MINOR: z.coerce.number().int().min(0).default(500_000), // ₹5,000
+
+  // Loyalty ledger. Points earned = floor(order net ÷ divisor). Default: 1 point
+  // per ₹100 (10,000 paise). Net = totalMinor − refundedMinor on paid/fulfilled.
+  LOYALTY_EARN_DIVISOR_MINOR: z.coerce.number().int().min(1).default(10_000),
+
+  // Threshold incentive engine. "X products" metric is defined PRECISELY here.
+  INCENTIVE_TRIGGER_METRIC: z.enum(['units', 'orders', 'distinct_skus']).default('units'),
+  INCENTIVE_TRIGGER_THRESHOLD: z.coerce.number().int().min(1).default(5),
+  /** The discount VALUE cap (paise) — the reward can never exceed this. */
+  INCENTIVE_MAX_VALUE_MINOR: z.coerce.number().int().min(1).default(50_000), // ₹500
+  /** Minimum next-order subtotal to redeem (paise). */
+  INCENTIVE_MIN_NEXT_ORDER_MINOR: z.coerce.number().int().min(0).default(200_000), // ₹2,000
+  INCENTIVE_VALIDITY_DAYS: z.coerce.number().int().min(1).default(30),
+  /**
+   * Margin guard. When true (default — M5 margin data exists), low-margin SKUs
+   * are EXCLUDED from issued codes. When false, guards are OFF and the incentive
+   * records marginGuard=false so the exposure is HONEST (never faked).
+   */
+  INCENTIVE_MARGIN_GUARD: z
+    .string()
+    .transform((v) => v !== 'false' && v !== '0')
+    .pipe(z.boolean())
+    .default('true'),
+  /** A SKU is "low-margin" below this contribution-margin %. */
+  INCENTIVE_MARGIN_FLOOR_PCT: z.coerce.number().min(0).max(100).default(20),
+  /** Expiry sweep cadence (ms). Default 1h. */
+  INCENTIVE_SWEEP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(60 * 60 * 1000),
 });
 
 export type Env = z.infer<typeof envSchema>;
