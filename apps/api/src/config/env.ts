@@ -114,6 +114,14 @@ const envSchema = z.object({
   META_GRAPH_VERSION: z.string().default('v21.0'),
   /** Daily ad-metrics + leads + attribution-refresh cadence (ms). Default 24h. */
   META_METRICS_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
+
+  // VIP tiering. The INPUT is a config switch: 'clv' tiers on clvMinor (falling
+  // back to netRevenueMinor when CLV isn't computed yet), 'spend' tiers purely on
+  // netRevenueMinor. Thresholds are inclusive lower bounds in minor units (paise).
+  VIP_TIER_INPUT: z.enum(['clv', 'spend']).default('clv'),
+  VIP_TIER_VIP_MINOR: z.coerce.number().int().min(0).default(5_000_000), // ₹50,000
+  VIP_TIER_GOLD_MINOR: z.coerce.number().int().min(0).default(2_000_000), // ₹20,000
+  VIP_TIER_SILVER_MINOR: z.coerce.number().int().min(0).default(500_000), // ₹5,000
 });
 
 export type Env = z.infer<typeof envSchema>;

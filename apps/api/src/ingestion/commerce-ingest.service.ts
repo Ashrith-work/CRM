@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { IdentityService } from '../customers/identity.service';
 import { MarketingConsentWriter } from './marketing-consent.writer';
+import { firstTouchSource } from '../attribution/utm.util';
 import { ShopifyService, type ShopifyConn } from './shopify.service';
 import {
   mapCheckout,
@@ -61,6 +62,10 @@ export class CommerceIngestService {
       select: { id: true },
     });
 
+    // First-touch source from the cart attributes (Part 9). "unknown" when the
+    // UTMs were absent — never fabricated.
+    const source = firstTouchSource(o.attributes);
+
     const order = await this.prisma.order.upsert({
       where: { organizationId_externalId: { organizationId, externalId: o.externalId } },
       update: {
@@ -75,7 +80,7 @@ export class CommerceIngestService {
         discountMinor: o.discountMinor,
         placedAt: o.placedAt,
         // Only overwrite attributes when this payload carried them (don't wipe).
-        ...(o.attributes ? { attributes: o.attributes as Prisma.InputJsonValue } : {}),
+        ...(o.attributes ? { attributes: o.attributes as Prisma.InputJsonValue, firstTouchSource: source } : {}),
         deletedAt: null,
       },
       create: {
@@ -91,7 +96,25 @@ export class CommerceIngestService {
         discountCode: o.discountCode,
         discountMinor: o.discountMinor,
         ...(o.attributes ? { attributes: o.attributes as Prisma.InputJsonValue } : {}),
+        firstTouchSource: source,
         placedAt: o.placedAt,
+      },
+    });
+
+    // Store the order-level touchpoint (Part 9 — EVERY touchpoint). Idempotent on
+    // (org, channel, sessionId=order externalId).
+    await this.prisma.touchpoint.upsert({
+      where: { organizationId_channel_sessionId: { organizationId, channel: 'web', sessionId: o.externalId } },
+      update: { customerId, source, occurredAt: o.placedAt },
+      create: {
+        organizationId,
+        customerId,
+        channel: 'web',
+        sessionId: o.externalId,
+        source,
+        campaign: (o.attributes?.utm?.campaign as string | undefined) ?? null,
+        utm: (o.attributes ?? undefined) as never,
+        occurredAt: o.placedAt,
       },
     });
 

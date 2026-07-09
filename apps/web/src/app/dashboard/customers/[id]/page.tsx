@@ -71,6 +71,7 @@ export default function Customer360Page() {
               <MetricBadge label="Net revenue" metricKey="net_revenue" value={formatMoney(c.features.netRevenueMinor, currency)} />
               <MetricBadge label="Orders" metricKey="order_count" value={c.features.orderCount} />
               <MetricBadge label="Avg order" metricKey="avg_order_value" value={formatMoney(c.features.avgOrderValueMinor, currency)} />
+              <MetricBadge label="VIP tier" metricKey="vip_tier" value={c.features.badges.vipTier ?? 'Standard'} />
               <MetricBadge label="RFM" metricKey="rfm" value={c.features.badges.rfm ?? '—'} />
               <MetricBadge label="CLV" metricKey="clv" value={c.features.badges.clv != null ? formatMoney(c.features.badges.clv, currency) : '—'} />
               <MetricBadge label="Churn risk" metricKey="churn_risk" value={c.features.badges.churnRisk != null ? `${Math.round(c.features.badges.churnRisk * 100)}%` : '—'} />

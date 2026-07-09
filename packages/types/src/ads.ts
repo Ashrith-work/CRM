@@ -75,6 +75,29 @@ export const SourceRoiResponseSchema = z.object({
 export type SourceRoiResponse = z.infer<typeof SourceRoiResponseSchema>;
 
 // ---------------------------------------------------------------------------
+// Order-level attribution coverage (orders with a known source ÷ all orders).
+// ---------------------------------------------------------------------------
+export const OrderSourceCountSchema = z.object({ source: z.string(), orders: z.number().int() });
+export type OrderSourceCount = z.infer<typeof OrderSourceCountSchema>;
+
+export const OrderCoverageResponseSchema = z.object({
+  totalOrders: z.number().int(),
+  ordersWithKnownSource: z.number().int(),
+  /** ordersWithKnownSource ÷ totalOrders × 100. */
+  coveragePct: z.number(),
+  /** First-touch source breakdown by order count (incl. "unknown"). */
+  bySource: z.array(OrderSourceCountSchema),
+});
+export type OrderCoverageResponse = z.infer<typeof OrderCoverageResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// VIP tiers.
+// ---------------------------------------------------------------------------
+export const VIP_TIERS = ['VIP', 'Gold', 'Silver', 'Standard'] as const;
+export const VipTierSchema = z.enum(VIP_TIERS);
+export type VipTier = z.infer<typeof VipTierSchema>;
+
+// ---------------------------------------------------------------------------
 // Ad performance (campaign/adset/ad rollups).
 // ---------------------------------------------------------------------------
 export const AdPerformanceRowSchema = z.object({

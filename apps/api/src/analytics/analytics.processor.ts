@@ -5,6 +5,7 @@ import { Queue } from 'bullmq';
 import type { Env } from '../config/env';
 import { RfmRefreshService } from './rfm-refresh.service';
 import { ChurnScoreService } from './churn-score.service';
+import { TierService } from './tier.service';
 import { SegmentService } from '../segments/segment.service';
 import { ANALYTICS_QUEUE, RFM_REFRESH_JOB_ID, type AnalyticsRefreshJob } from './analytics.constants';
 
@@ -24,6 +25,7 @@ export class AnalyticsProcessor extends WorkerHost implements OnModuleInit {
     private readonly config: ConfigService<Env, true>,
     private readonly rfm: RfmRefreshService,
     private readonly churn: ChurnScoreService,
+    private readonly tiers: TierService,
     private readonly segments: SegmentService,
     @InjectQueue(ANALYTICS_QUEUE) private readonly queue: Queue,
   ) {
@@ -45,7 +47,9 @@ export class AnalyticsProcessor extends WorkerHost implements OnModuleInit {
   async process(job: { name: string }): Promise<unknown> {
     if (job.name === 'churn') return this.churn.scoreAll();
     const rfm = await this.rfm.refreshAll();
+    // Tiers depend on CLV/spend features, so assign them right after the refresh.
+    const tiered = await this.tiers.assignAll();
     const segments = await this.segments.refreshDynamic();
-    return { rfm, segments };
+    return { rfm, tiered, segments };
   }
 }

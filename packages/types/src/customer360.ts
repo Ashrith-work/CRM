@@ -21,6 +21,8 @@ export const CustomerBadgesSchema = z.object({
   clvBand: z.string().nullable(), // High | Mid | Low
   churnRisk: z.number().nullable(), // 0..1 heuristic score
   churnBand: z.string().nullable(), // Low | Medium | High | Unknown
+  /** VIP | Gold | Silver | Standard — assigned by the tier worker. */
+  vipTier: z.string().nullable(),
   apparelSize: z.string().nullable(),
   fit: z.string().nullable(),
   styleAffinity: z.string().nullable(),

@@ -12,6 +12,7 @@ const NAV_GROUPS: Array<{ label: string; items: Array<{ href: string; label: str
       { href: '/dashboard/sales', label: 'Sales' },
       { href: '/dashboard/analytics', label: 'Analytics' },
       { href: '/dashboard/analytics/ads', label: 'Ads' },
+      { href: '/dashboard/analytics/attribution', label: 'Attribution' },
       { href: '/dashboard/assistant', label: 'Ask' },
     ],
   },

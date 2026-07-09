@@ -9,6 +9,7 @@ import {
   MetaStatusSchema,
   SourceRoiResponseSchema,
   ReconciliationResponseSchema,
+  OrderCoverageResponseSchema,
   AdPerformanceResponseSchema,
   AudienceSyncListResponseSchema,
   AudienceSyncSchema,
@@ -16,6 +17,7 @@ import {
   type MetaStatus,
   type SourceRoiResponse,
   type ReconciliationResponse,
+  type OrderCoverageResponse,
   type AdPerformanceResponse,
   type AudienceSyncListResponse,
   type AudienceSyncDto,
@@ -785,6 +787,9 @@ export function getSourceRoi(getToken: TokenGetter, model: AttributionModel = 'f
 }
 export function getReconciliation(getToken: TokenGetter): Promise<ReconciliationResponse> {
   return request(getToken, `${API_ROUTES.attribution}/reconciliation`, ReconciliationResponseSchema);
+}
+export function getOrderCoverage(getToken: TokenGetter): Promise<OrderCoverageResponse> {
+  return request(getToken, `${API_ROUTES.attribution}/order-coverage`, OrderCoverageResponseSchema);
 }
 export function getAdPerformance(getToken: TokenGetter): Promise<AdPerformanceResponse> {
   return request(getToken, `${API_ROUTES.ads}/performance`, AdPerformanceResponseSchema);

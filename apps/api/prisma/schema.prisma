@@ -220,6 +220,9 @@ model Order {
    * Shopify cart attributes (note_attributes) / landing_site. Shape:
    * { utm: {source,medium,campaign,content,term}, landingSite, referringSite }. */
   attributes      Json?
+  /** Denormalized first-touch source (from cart attributes) for cheap order-level
+   * coverage %; "unknown" when UTMs were absent (never fabricated). */
+  firstTouchSource String?
   placedAt        DateTime
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -232,6 +235,7 @@ model Order {
   @@index([organizationId, customerId])
   @@index([organizationId, placedAt])
   @@index([organizationId, financialStatus])
+  @@index([organizationId, firstTouchSource])
 }
 
 model OrderItem {
@@ -383,6 +387,8 @@ model CustomerFeatures {
   clvBand       String? // High | Mid | Low
   churnRisk     Float?  // 0..1 heuristic score
   churnBand     String? // Low | Medium | High | Unknown
+  /** VIP tier assigned by the tier worker from CLV (or spend fallback). */
+  vipTier       String? // VIP | Gold | Silver | Standard
   apparelSize   String?
   fit           String?
   styleAffinity String?

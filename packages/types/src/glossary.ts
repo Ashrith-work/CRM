@@ -163,6 +163,13 @@ export const GLOSSARY_REGISTRY: Record<string, GlossaryEntry> = {
     dataWindow: 'lifetime',
     lastSynced: SYNCED_ADS,
   },
+  vip_tier: {
+    metricKey: 'vip_tier',
+    plainLanguage: 'The customer\'s value tier (VIP / Gold / Silver / Standard), assigned from lifetime value (or total spend as a fallback) against configured thresholds.',
+    formula: 'band of CLV (or net revenue when CLV is unset) against VIP/Gold/Silver thresholds',
+    dataWindow: 'lifetime (nightly refresh)',
+    lastSynced: SYNCED_ADS,
+  },
 };
 
 /** Resolve a metric's glossary entry, or null if unknown. */

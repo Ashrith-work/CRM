@@ -3,6 +3,7 @@ import {
   PERMISSIONS,
   AttributionModelSchema,
   type AttributionModel,
+  type OrderCoverageResponse,
   type ReconciliationResponse,
   type SourceRoiResponse,
 } from '@crm/types';
@@ -31,6 +32,13 @@ export class AttributionController {
   @RequirePermission(PERMISSIONS.ADS_READ)
   async coverage(@CurrentUser() ctx: UserContext): Promise<{ coveragePct: number }> {
     return { coveragePct: await this.attribution.coveragePct(ctx.organization.id) };
+  }
+
+  /** Order-level coverage: orders with a known first-touch source ÷ all orders. */
+  @Get('order-coverage')
+  @RequirePermission(PERMISSIONS.ADS_READ)
+  async orderCoverage(@CurrentUser() ctx: UserContext): Promise<OrderCoverageResponse> {
+    return this.attribution.orderCoverage(ctx.organization.id);
   }
 
   @Get('reconciliation')

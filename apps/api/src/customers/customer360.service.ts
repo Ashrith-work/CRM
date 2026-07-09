@@ -74,6 +74,7 @@ export class Customer360Service {
           clvBand: features?.clvBand ?? null,
           churnRisk: features?.churnRisk ?? null,
           churnBand: features?.churnBand ?? null,
+          vipTier: features?.vipTier ?? null,
           apparelSize: features?.apparelSize ?? null,
           fit: features?.fit ?? null,
           styleAffinity: features?.styleAffinity ?? null,

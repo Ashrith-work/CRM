@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type {
   AdPerformanceResponse,
   AttributionModel,
+  OrderCoverageResponse,
   ReconciliationResponse,
   SourceRoiResponse,
   SourceRoiRow,
@@ -151,6 +152,38 @@ export class AttributionService {
       });
     }
     return rows.sort((x, y) => y.spendMinor - x.spendMinor || x.source.localeCompare(y.source));
+  }
+
+  // ----- order-level coverage ---------------------------------------------
+  /**
+   * ORDER-level attribution coverage: orders with a known first-touch source ÷
+   * all orders. "unknown" (UTMs absent) is honestly counted, never fabricated.
+   */
+  async orderCoverage(organizationId: string): Promise<OrderCoverageResponse> {
+    const grouped = await this.prisma.order.groupBy({
+      by: ['firstTouchSource'],
+      where: { organizationId, deletedAt: null },
+      _count: { _all: true },
+    });
+    // Fold null + 'unknown' into a single "unknown" bucket.
+    const byKey = new Map<string, number>();
+    for (const g of grouped) {
+      const key = g.firstTouchSource && g.firstTouchSource !== 'unknown' ? g.firstTouchSource : 'unknown';
+      byKey.set(key, (byKey.get(key) ?? 0) + g._count._all);
+    }
+    let total = 0;
+    let known = 0;
+    for (const [source, orders] of byKey) {
+      total += orders;
+      if (source !== 'unknown') known += orders;
+    }
+    const bySource = [...byKey.entries()].map(([source, orders]) => ({ source, orders })).sort((a, b) => b.orders - a.orders);
+    return {
+      totalOrders: total,
+      ordersWithKnownSource: known,
+      coveragePct: total > 0 ? Number(((known / total) * 100).toFixed(1)) : 0,
+      bySource,
+    };
   }
 
   // ----- coverage ---------------------------------------------------------
