@@ -20,9 +20,15 @@ export class GroundingService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** The exact text embedded for a metric (definition + formula + window). */
+  /**
+   * The exact text embedded for a metric. The metric's own name is weighted
+   * (repeated) so a question naming a metric retrieves ITS definition first —
+   * without this, entries whose bodies merely mention a common word (e.g. many
+   * definitions reference "revenue") can outrank the metric actually asked about.
+   */
   private contentFor(entry: GlossaryEntry): string {
-    return `${entry.metricKey.replace(/_/g, ' ')}: ${entry.plainLanguage} ${entry.formula} ${entry.dataWindow}`;
+    const name = entry.metricKey.replace(/_/g, ' ');
+    return `${name} ${name} ${name}: ${entry.plainLanguage} ${entry.formula} ${entry.dataWindow}`;
   }
 
   /**
