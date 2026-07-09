@@ -5,6 +5,8 @@ import {
   ClvDistributionResponseSchema,
   ChurnWatchlistResponseSchema,
   MarginResponseSchema,
+  AssistantAnswerSchema,
+  type AssistantAnswer,
   type RevenueTrendResponse,
   type CohortResponse,
   type ClvDistributionResponse,
@@ -742,6 +744,15 @@ export function getChurnWatchlist(getToken: TokenGetter): Promise<ChurnWatchlist
 }
 export function getMargin(getToken: TokenGetter): Promise<MarginResponse> {
   return request(getToken, `${API_ROUTES.analytics}/margin`, MarginResponseSchema);
+}
+
+// --- Read-only AI assistant (P2.2) ------------------------------------------
+/** Ask a grounded, RBAC-scoped question. The answer inherits the asker's role. */
+export function askAssistant(getToken: TokenGetter, question: string): Promise<AssistantAnswer> {
+  return request(getToken, `${API_ROUTES.assistant}/ask`, AssistantAnswerSchema, {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  });
 }
 
 export function previewSegment(getToken: TokenGetter, rules: RuleGroup): Promise<SegmentPreviewResponse> {

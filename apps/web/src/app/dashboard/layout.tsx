@@ -11,6 +11,7 @@ const NAV_GROUPS: Array<{ label: string; items: Array<{ href: string; label: str
       { href: '/dashboard', label: 'Home' },
       { href: '/dashboard/sales', label: 'Sales' },
       { href: '/dashboard/analytics', label: 'Analytics' },
+      { href: '/dashboard/assistant', label: 'Ask' },
     ],
   },
   {

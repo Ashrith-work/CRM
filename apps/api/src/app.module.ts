@@ -31,6 +31,7 @@ import { CustomersModule } from './customers/customers.module';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
+import { AssistantModule } from './assistant/assistant.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -83,6 +84,8 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     AnalyticsModule,
     // M4 — abandoned-cart recovery (the closed loop / MVP ship line).
     CampaignsModule,
+    // P2.2 — read-only, RBAC-scoped, glossary-grounded AI assistant.
+    AssistantModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

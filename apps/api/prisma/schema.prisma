@@ -32,6 +32,7 @@ model Organization {
   userRoles       UserRole[]
   teamMemberships TeamMembership[]
   auditLogs       AuditLog[]
+  aiQueries       AiQuery[]
 
   // Milestone 1 — CRM data model.
   companies              Company[]
@@ -552,6 +553,28 @@ model AuditLog {
 
   @@index([organizationId])
   @@index([organizationId, createdAt])
+}
+
+// P2.2 — read-only AI assistant. One row per question: who asked, the question,
+// which SAFE read-only tools ran (never SQL — there is none), and when. This is
+// the assistant's own audit trail (the AuditInterceptor only logs mutations;
+// asking is a read, so the assistant records it here explicitly). The assistant
+// never returns data the asker's role couldn't otherwise see.
+model AiQuery {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorUserId    String
+  question       String
+  /** [{ tool, args, rowCount }] — the curated tools the orchestrator invoked. */
+  toolsCalled    Json
+  /** Whether the answer was served from cache (cost accounting). */
+  cached         Boolean  @default(false)
+  answeredAt     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, answeredAt])
+  @@index([organizationId, actorUserId])
 }
 
 // ============================================================================

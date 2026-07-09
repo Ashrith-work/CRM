@@ -25,6 +25,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
     "@clerk/backend": "^1.21.4",
     "@crm/types": "workspace:*",
     "@nestjs/bullmq": "^11.0.1",

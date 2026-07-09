@@ -72,6 +72,12 @@ export const PERMISSIONS = {
   // M4 — abandoned-cart recovery campaigns.
   CAMPAIGN_READ: 'campaign:read',
   CAMPAIGN_MANAGE: 'campaign:manage',
+
+  // P2.2 — read-only AI assistant. Grounded, RBAC-scoped, never-acts Q&A over
+  // the analytics layer. Read-only (there is NO ai:manage — the assistant can
+  // never mutate); the asker's OTHER permissions still gate what data it sees
+  // (e.g. pii:read decides masked vs unmasked). Held by every role.
+  AI_QUERY: 'ai:query',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -146,6 +152,8 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // Recovery campaigns (admin manages; everyone can read below).
     PERMISSIONS.CAMPAIGN_READ,
     PERMISSIONS.CAMPAIGN_MANAGE,
+    // Read-only AI assistant (answers inherit these very permissions).
+    PERMISSIONS.AI_QUERY,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -180,5 +188,9 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.SEGMENT_READ,
     // Reps can view campaigns + recovery stats.
     PERMISSIONS.CAMPAIGN_READ,
+    // Reps can ask the read-only assistant. It inherits this member's scope, so
+    // PII stays masked (no pii:read) — proving a lower-privilege asker can't
+    // extract data they couldn't otherwise see.
+    PERMISSIONS.AI_QUERY,
   ],
 };

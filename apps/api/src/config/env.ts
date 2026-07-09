@@ -85,6 +85,21 @@ const envSchema = z.object({
   UNSUBSCRIBE_SECRET: z.string().default('dev-unsubscribe-secret'),
   /** When set, Resend webhooks must carry a matching HMAC (else dev-lenient). */
   RESEND_WEBHOOK_SECRET: z.string().optional(),
+
+  // P2.2 — read-only AI assistant. When ANTHROPIC_API_KEY is unset the
+  // assistant runs a deterministic, still-grounded fallback (MOCK mode), so the
+  // safe tools / RBAC / grounding / caching / audit all work without a key.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  /** Cheap model for intent/tool routing. */
+  ASSISTANT_ROUTING_MODEL: z.string().default('claude-haiku-4-5'),
+  /** Stronger model for the final grounded composition. */
+  ASSISTANT_COMPOSER_MODEL: z.string().default('claude-opus-4-8'),
+  /** Hard cap on output tokens per model call (cost bound). */
+  ASSISTANT_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).max(4096).default(1024),
+  /** Max tool-calling iterations before composing (cost bound). */
+  ASSISTANT_MAX_TOOL_STEPS: z.coerce.number().int().min(1).max(12).default(6),
+  /** Short cache TTL for identical (org, role-scope, question) answers. 0 disables. */
+  ASSISTANT_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(300),
 });
 
 export type Env = z.infer<typeof envSchema>;

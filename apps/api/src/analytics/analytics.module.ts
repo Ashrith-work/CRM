@@ -18,6 +18,6 @@ import { ANALYTICS_QUEUE } from './analytics.constants';
   imports: [BullModule.registerQueue({ name: ANALYTICS_QUEUE })],
   controllers: [AnalyticsController, SegmentsController],
   providers: [AnalyticsService, RfmRefreshService, ChurnScoreService, SegmentService, AnalyticsProcessor],
-  exports: [RfmRefreshService, ChurnScoreService, SegmentService],
+  exports: [AnalyticsService, RfmRefreshService, ChurnScoreService, SegmentService],
 })
 export class AnalyticsModule {}
