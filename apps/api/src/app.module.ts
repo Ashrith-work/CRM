@@ -32,6 +32,7 @@ import { IngestionModule } from './ingestion/ingestion.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { AssistantModule } from './assistant/assistant.module';
+import { AdsModule } from './ads/ads.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -86,6 +87,8 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     CampaignsModule,
     // P2.2 — read-only, RBAC-scoped, glossary-grounded AI assistant.
     AssistantModule,
+    // P2.3 — Meta ads + first-touch attribution + consented audience sync.
+    AdsModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.

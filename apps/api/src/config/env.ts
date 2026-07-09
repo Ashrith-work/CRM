@@ -100,6 +100,20 @@ const envSchema = z.object({
   ASSISTANT_MAX_TOOL_STEPS: z.coerce.number().int().min(1).max(12).default(6),
   /** Short cache TTL for identical (org, role-scope, question) answers. 0 disables. */
   ASSISTANT_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(300),
+
+  // P2.3 — Meta ads. When META_ACCESS_TOKEN / META_AD_ACCOUNT_ID are unset the
+  // connector reports not_connected and workers skip gracefully (MOCK mode).
+  META_APP_ID: z.string().optional(),
+  META_APP_SECRET: z.string().optional(),
+  /** System-user / long-lived access token (Marketing API). */
+  META_ACCESS_TOKEN: z.string().optional(),
+  /** act_<id> (the "act_" prefix is added if missing). */
+  META_AD_ACCOUNT_ID: z.string().optional(),
+  META_BUSINESS_ID: z.string().optional(),
+  /** Pinned Graph API version — bump deliberately. */
+  META_GRAPH_VERSION: z.string().default('v21.0'),
+  /** Daily ad-metrics + leads + attribution-refresh cadence (ms). Default 24h. */
+  META_METRICS_INTERVAL_MS: z.coerce.number().int().min(60_000).default(24 * 60 * 60 * 1000),
 });
 
 export type Env = z.infer<typeof envSchema>;

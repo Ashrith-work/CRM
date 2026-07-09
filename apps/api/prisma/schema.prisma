@@ -89,6 +89,17 @@ model Organization {
   messageTemplates    MessageTemplate[]
   suppressions        Suppression[]
 
+  // P2.3 — Meta ads + attribution + audiences.
+  adAccounts    AdAccount[]
+  adCampaigns   AdCampaign[]
+  adSets        AdSet[]
+  ads           Ad[]
+  adCreatives   AdCreative[]
+  adMetrics     AdMetricDaily[]
+  touchpoints   Touchpoint[]
+  adLeads       AdLead[]
+  audienceSyncs AudienceSync[]
+
   @@index([slug])
 }
 
@@ -205,6 +216,10 @@ model Order {
   currency        String          @default("INR")
   discountCode    String?
   discountMinor   Int             @default(0)
+  /** P2.3 — first-touch attribution ride-along: landing UTMs + referrer from
+   * Shopify cart attributes (note_attributes) / landing_site. Shape:
+   * { utm: {source,medium,campaign,content,term}, landingSite, referringSite }. */
+  attributes      Json?
   placedAt        DateTime
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -245,6 +260,8 @@ model Cart {
   checkoutStartedAt DateTime
   /** Set when a matching Order arrives — halts M4 abandoned-cart recovery. */
   convertedOrderId String?
+  /** P2.3 — first-touch UTM/referrer ride-along (same shape as Order.attributes). */
+  attributes       Json?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
@@ -1323,4 +1340,202 @@ model Suppression {
 
   @@unique([organizationId, email])
   @@index([organizationId, email])
+}
+
+// ============================================================================
+// P2.3 — Meta ads + first-touch attribution + audience sync.
+// Every ad entity carries organizationId + externalId with UNIQUE(org,externalId)
+// for idempotent upserts. Money is integer minor units (paise); time is UTC.
+// ============================================================================
+
+/** Which node of the Meta hierarchy an AdMetricDaily row rolls up. */
+enum AdEntityType {
+  campaign
+  adset
+  ad
+  creative
+}
+
+/** A Meta ad account (the connected surface). */
+model AdAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  externalId     String // act_<id>
+  name           String
+  currency       String   @default("INR")
+  status         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId])
+}
+
+model AdCampaign {
+  id                String   @id @default(cuid())
+  organizationId    String
+  externalId        String
+  accountExternalId String?
+  name              String
+  status            String?
+  objective         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId])
+}
+
+model AdSet {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  externalId         String
+  campaignExternalId String?
+  name               String
+  status             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId])
+}
+
+model Ad {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  externalId         String
+  adsetExternalId    String?
+  creativeExternalId String?
+  name               String
+  status             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId])
+}
+
+model AdCreative {
+  id             String   @id @default(cuid())
+  organizationId String
+  externalId     String
+  name           String
+  thumbnailUrl   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId])
+}
+
+/** Daily rollup per entity. UNIQUE(org, entityType, entityId, date) makes a
+ * re-pull of a day OVERWRITE (idempotent), never duplicate. */
+model AdMetricDaily {
+  id             String       @id @default(cuid())
+  organizationId String
+  entityType     AdEntityType
+  entityId       String // the entity's Meta externalId
+  date           DateTime     @db.Date
+  spendMinor     Int          @default(0)
+  impressions    Int          @default(0)
+  clicks         Int          @default(0)
+  conversions    Int          @default(0) // Meta-REPORTED (over-reports; see glossary)
+  currency       String       @default("INR")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, entityType, entityId, date])
+  @@index([organizationId, entityType, date])
+}
+
+/** EVERY touchpoint (Part 9). We bucket acquisition on the FIRST-touch source
+ * but keep every one. Web touchpoints ride in via order cart attributes; Meta
+ * touchpoints come from Lead-Ads. UNIQUE(org, channel, sessionId) dedups. */
+model Touchpoint {
+  id             String   @id @default(cuid())
+  organizationId String
+  customerId     String?
+  sessionId      String // order externalId (web) or lead externalId (meta)
+  channel        String // "web" | "meta" | ...
+  source         String // utm_source / "meta" / "unknown"
+  campaign       String?
+  adset          String?
+  creative       String?
+  utm            Json?
+  occurredAt     DateTime
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, channel, sessionId])
+  @@index([organizationId, customerId, occurredAt])
+  @@index([organizationId, source])
+}
+
+/** Meta Lead-Ads submission, first-touch attributed. Distinct from the CRM
+ * `Lead` (which converts to a Contact) — an AdLead converts to a Customer. */
+enum AdLeadStatus {
+  NEW
+  CONVERTED
+}
+
+model AdLead {
+  id                     String       @id @default(cuid())
+  organizationId         String
+  externalId             String // Meta leadgen id
+  formId                 String?
+  name                   String?
+  email                  String?
+  phone                  String?
+  source                 String       @default("meta")
+  campaign               String?
+  adset                  String?
+  ad                     String?
+  firstTouchTouchpointId String?
+  status                 AdLeadStatus @default(NEW)
+  convertedCustomerId    String?
+  occurredAt             DateTime
+  createdAt              DateTime     @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, email])
+  @@index([organizationId, status])
+}
+
+/** Audit of every segment→Meta audience push. */
+enum AudienceType {
+  custom
+  suppression
+}
+
+model AudienceSync {
+  id                String       @id @default(cuid())
+  organizationId    String
+  segmentId         String
+  metaAudienceId    String?
+  type              AudienceType @default(custom)
+  sizeSynced        Int          @default(0)
+  excludedByConsent Int          @default(0)
+  lastSyncedAt      DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, segmentId])
 }

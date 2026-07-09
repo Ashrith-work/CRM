@@ -78,6 +78,12 @@ export const PERMISSIONS = {
   // never mutate); the asker's OTHER permissions still gate what data it sees
   // (e.g. pii:read decides masked vs unmasked). Held by every role.
   AI_QUERY: 'ai:query',
+
+  // P2.3 — Meta ads + attribution. ADS_READ gates the source-ROI/attribution
+  // dashboards; ADS_MANAGE gates connecting Meta, forcing a metrics sync, and
+  // pushing (consented-only) audiences to Meta.
+  ADS_READ: 'ads:read',
+  ADS_MANAGE: 'ads:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -154,6 +160,9 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     PERMISSIONS.CAMPAIGN_MANAGE,
     // Read-only AI assistant (answers inherit these very permissions).
     PERMISSIONS.AI_QUERY,
+    // Meta ads: admins connect Meta + push audiences; everyone reads below.
+    PERMISSIONS.ADS_READ,
+    PERMISSIONS.ADS_MANAGE,
   ],
   [SYSTEM_ROLES.MEMBER]: [
     PERMISSIONS.ORG_READ,
@@ -192,5 +201,7 @@ export const ROLE_PERMISSIONS: Record<SystemRoleName, Permission[]> = {
     // PII stays masked (no pii:read) — proving a lower-privilege asker can't
     // extract data they couldn't otherwise see.
     PERMISSIONS.AI_QUERY,
+    // Reps can view the source-ROI / attribution dashboards (not connect Meta).
+    PERMISSIONS.ADS_READ,
   ],
 };

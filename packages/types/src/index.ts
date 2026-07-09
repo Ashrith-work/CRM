@@ -14,6 +14,7 @@ export * from './glossary';
 export * from './analytics';
 export * from './campaigns';
 export * from './assistant';
+export * from './ads';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -60,5 +61,9 @@ export const API_ROUTES = {
   resendWebhook: `/${API_PREFIX}/webhooks/resend`,
   // P2.2 read-only AI assistant.
   assistant: `/${API_PREFIX}/assistant`,
+  // P2.3 Meta ads + attribution + audiences.
+  ads: `/${API_PREFIX}/ads`,
+  attribution: `/${API_PREFIX}/attribution`,
+  audiences: `/${API_PREFIX}/audiences`,
   // P2.1 deep analytics (revenue/cohorts/clv/churn/margin) share /analytics.
 } as const;

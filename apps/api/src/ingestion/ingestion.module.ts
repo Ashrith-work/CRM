@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { CustomersModule } from '../customers/customers.module';
 import { ShopifyService } from './shopify.service';
 import { CommerceIngestService } from './commerce-ingest.service';
+import { MarketingConsentWriter } from './marketing-consent.writer';
 import { IngestionService } from './ingestion.service';
 import { IngestionController } from './ingestion.controller';
 import { ShopifyWebhookController } from './shopify-webhook.controller';
@@ -17,7 +18,7 @@ import { SHOPIFY_SYNC_QUEUE } from './commerce.constants';
 @Module({
   imports: [CustomersModule, BullModule.registerQueue({ name: SHOPIFY_SYNC_QUEUE })],
   controllers: [IngestionController, ShopifyWebhookController],
-  providers: [ShopifyService, CommerceIngestService, IngestionService, SyncProcessor],
+  providers: [ShopifyService, CommerceIngestService, IngestionService, SyncProcessor, MarketingConsentWriter],
   exports: [IngestionService],
 })
 export class IngestionModule {}

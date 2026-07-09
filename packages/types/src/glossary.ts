@@ -6,10 +6,13 @@
  * shape + resolver are introduced here.
  */
 
-export const GLOSSARY_VERSION = 2;
+export const GLOSSARY_VERSION = 3;
 
 /** Definition-sync date for the metrics wired to real data (M3). */
 const SYNCED = '2026-07-08';
+
+/** Definition-sync date for the Meta ads + attribution metrics (P2.3). */
+const SYNCED_ADS = '2026-07-09';
 
 export interface GlossaryEntry {
   metricKey: string;
@@ -104,16 +107,62 @@ export const GLOSSARY_REGISTRY: Record<string, GlossaryEntry> = {
     dataWindow: 'daily (org timezone, nightly refresh)',
     lastSynced: SYNCED,
   },
-  ltv_cac: {
-    metricKey: 'ltv_cac',
-    plainLanguage: 'Lifetime value relative to what it costs to acquire a customer.',
-    formula: 'clv ÷ acquisition_cost — stub in this phase',
-    dataWindow: 'predicted',
-    lastSynced: null,
-  },
   apparel_size: { metricKey: 'apparel_size', plainLanguage: "The customer's most-ordered apparel size.", formula: 'mode(order_item.variant size)', dataWindow: 'lifetime', lastSynced: null },
   fit: { metricKey: 'fit', plainLanguage: 'Preferred fit inferred from purchases/returns.', formula: 'derived in M3', dataWindow: 'lifetime', lastSynced: null },
   style_affinity: { metricKey: 'style_affinity', plainLanguage: 'Style/category the customer gravitates to.', formula: 'derived in M3', dataWindow: 'lifetime', lastSynced: null },
+
+  // P2.3 — Meta ads + attribution. Money is store-actual (paise) except where a
+  // metric is explicitly Meta-reported (conversions). Attribution buckets on
+  // FIRST-TOUCH by default; the model is always labelled in the UI.
+  roas: {
+    metricKey: 'roas',
+    plainLanguage: 'Return on ad spend — store-actual revenue earned per unit of ad spend, by acquisition source.',
+    formula: 'store-actual net revenue (first-touch attributed) ÷ ad spend',
+    dataWindow: 'lifetime of acquired customers / spend to date',
+    lastSynced: SYNCED_ADS,
+  },
+  cac: {
+    metricKey: 'cac',
+    plainLanguage: 'Customer acquisition cost — ad spend divided by the number of customers that source first-touch acquired.',
+    formula: 'spend(source) ÷ customers_acquired(source, first-touch)',
+    dataWindow: 'to date',
+    lastSynced: SYNCED_ADS,
+  },
+  ltv_cac: {
+    metricKey: 'ltv_cac',
+    plainLanguage: 'Lifetime value relative to acquisition cost. Above ~3 is healthy; below 1 means a source loses money.',
+    formula: 'avg store-actual net revenue per acquired customer ÷ CAC (first-touch bucketed)',
+    dataWindow: 'lifetime / to date',
+    lastSynced: SYNCED_ADS,
+  },
+  payback: {
+    metricKey: 'payback',
+    plainLanguage: 'CAC payback period — months of the source cohort’s average revenue needed to recover its acquisition cost.',
+    formula: 'CAC ÷ (avg net revenue per customer ÷ active months of the source cohort)',
+    dataWindow: 'to date',
+    lastSynced: SYNCED_ADS,
+  },
+  first_touch: {
+    metricKey: 'first_touch',
+    plainLanguage: 'The FIRST channel/source that brought a customer in. We store every touchpoint but bucket acquisition on the first one — deliberately, so we do not over-trust last-click.',
+    formula: 'earliest Touchpoint.source per customer (Meta ad, or landing UTM via Shopify cart attributes; else "unknown")',
+    dataWindow: 'lifetime',
+    lastSynced: SYNCED_ADS,
+  },
+  conversions: {
+    metricKey: 'conversions',
+    plainLanguage: 'Purchases attributed to ads. Meta REPORTS these and typically OVER-reports; we show Meta-reported next to store-actual orders and prefer store-actual for revenue.',
+    formula: 'Meta-reported: Insights "conversions". Store-actual: paid/fulfilled Orders for first-touch-Meta customers',
+    dataWindow: 'daily (Meta) / lifetime (store)',
+    lastSynced: SYNCED_ADS,
+  },
+  attribution_coverage: {
+    metricKey: 'attribution_coverage',
+    plainLanguage: 'Share of acquired customers whose first-touch source is known (not "unknown"). Missing UTMs (Shopify default) lower coverage — we never fabricate a source.',
+    formula: 'customers with a non-"unknown" first-touch ÷ all acquired customers',
+    dataWindow: 'lifetime',
+    lastSynced: SYNCED_ADS,
+  },
 };
 
 /** Resolve a metric's glossary entry, or null if unknown. */

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { IdentityService } from '../customers/identity.service';
+import { MarketingConsentWriter } from './marketing-consent.writer';
 import { ShopifyService, type ShopifyConn } from './shopify.service';
 import {
   mapCheckout,
@@ -31,6 +32,7 @@ export class CommerceIngestService {
     private readonly prisma: PrismaService,
     private readonly identity: IdentityService,
     private readonly shopify: ShopifyService,
+    private readonly marketingConsent: MarketingConsentWriter,
   ) {}
 
   // ----- Per-entity upserts (idempotent) ----------------------------------
@@ -51,7 +53,7 @@ export class CommerceIngestService {
   async upsertOrder(organizationId: string, o: MappedOrder): Promise<string> {
     const customerId = await this.upsertCustomer(
       organizationId,
-      o.customer ?? (o.contactEmail ? { externalId: null, email: o.contactEmail, phone: null, firstName: null, lastName: null } : null),
+      o.customer ?? (o.contactEmail ? { externalId: null, email: o.contactEmail, phone: null, firstName: null, lastName: null, acceptsMarketing: null } : null),
     );
 
     const existed = await this.prisma.order.findUnique({
@@ -72,6 +74,8 @@ export class CommerceIngestService {
         discountCode: o.discountCode,
         discountMinor: o.discountMinor,
         placedAt: o.placedAt,
+        // Only overwrite attributes when this payload carried them (don't wipe).
+        ...(o.attributes ? { attributes: o.attributes as Prisma.InputJsonValue } : {}),
         deletedAt: null,
       },
       create: {
@@ -86,6 +90,7 @@ export class CommerceIngestService {
         currency: o.currency,
         discountCode: o.discountCode,
         discountMinor: o.discountMinor,
+        ...(o.attributes ? { attributes: o.attributes as Prisma.InputJsonValue } : {}),
         placedAt: o.placedAt,
       },
     });
@@ -125,6 +130,11 @@ export class CommerceIngestService {
     if (customerId) {
       await this.recordOrderInteraction(organizationId, customerId, o);
       await this.recomputeFeatures(organizationId, customerId);
+      // P2.3 — capture MARKETING consent from Shopify so audience sync's
+      // ConsentGate has real consented customers (only when the flag was sent).
+      if (o.customer?.acceptsMarketing != null) {
+        await this.marketingConsent.recordFromShopify(organizationId, customerId, o.customer.acceptsMarketing);
+      }
     }
     return order.id;
   }
@@ -174,7 +184,7 @@ export class CommerceIngestService {
   async upsertCart(organizationId: string, c: MappedCheckout): Promise<string> {
     const customerId = await this.upsertCustomer(
       organizationId,
-      c.customer ?? (c.contactEmail ? { externalId: null, email: c.contactEmail, phone: null, firstName: null, lastName: null } : null),
+      c.customer ?? (c.contactEmail ? { externalId: null, email: c.contactEmail, phone: null, firstName: null, lastName: null, acceptsMarketing: null } : null),
     );
     const existed = await this.prisma.cart.findUnique({
       where: { organizationId_externalId: { organizationId, externalId: c.externalId } },
@@ -183,8 +193,8 @@ export class CommerceIngestService {
 
     const cart = await this.prisma.cart.upsert({
       where: { organizationId_externalId: { organizationId, externalId: c.externalId } },
-      update: { customerId, checkoutStartedAt: c.checkoutStartedAt, deletedAt: null },
-      create: { organizationId, externalId: c.externalId, customerId, checkoutStartedAt: c.checkoutStartedAt },
+      update: { customerId, checkoutStartedAt: c.checkoutStartedAt, ...(c.attributes ? { attributes: c.attributes as Prisma.InputJsonValue } : {}), deletedAt: null },
+      create: { organizationId, externalId: c.externalId, customerId, checkoutStartedAt: c.checkoutStartedAt, ...(c.attributes ? { attributes: c.attributes as Prisma.InputJsonValue } : {}) },
     });
 
     await this.prisma.cartItem.deleteMany({ where: { organizationId, cartId: cart.id } });

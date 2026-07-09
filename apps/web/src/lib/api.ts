@@ -6,7 +6,22 @@ import {
   ChurnWatchlistResponseSchema,
   MarginResponseSchema,
   AssistantAnswerSchema,
+  MetaStatusSchema,
+  SourceRoiResponseSchema,
+  ReconciliationResponseSchema,
+  AdPerformanceResponseSchema,
+  AudienceSyncListResponseSchema,
+  AudienceSyncSchema,
   type AssistantAnswer,
+  type MetaStatus,
+  type SourceRoiResponse,
+  type ReconciliationResponse,
+  type AdPerformanceResponse,
+  type AudienceSyncListResponse,
+  type AudienceSyncDto,
+  type AttributionModel,
+  type AudienceType,
+  type ConnectMetaInput,
   type RevenueTrendResponse,
   type CohortResponse,
   type ClvDistributionResponse,
@@ -753,6 +768,32 @@ export function askAssistant(getToken: TokenGetter, question: string): Promise<A
     method: 'POST',
     body: JSON.stringify({ question }),
   });
+}
+
+// --- Meta ads + attribution + audiences (P2.3) ------------------------------
+export function getMetaStatus(getToken: TokenGetter): Promise<MetaStatus> {
+  return request(getToken, `${API_ROUTES.ads}/status`, MetaStatusSchema);
+}
+export function connectMeta(getToken: TokenGetter, body: ConnectMetaInput): Promise<MetaStatus> {
+  return request(getToken, `${API_ROUTES.ads}/connect`, MetaStatusSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function syncMetaNow(getToken: TokenGetter): Promise<SyncNowResponse> {
+  return request(getToken, `${API_ROUTES.ads}/sync-now`, z.object({ enqueued: z.boolean(), jobId: z.string().nullable() }), { method: 'POST' });
+}
+export function getSourceRoi(getToken: TokenGetter, model: AttributionModel = 'first_touch'): Promise<SourceRoiResponse> {
+  return request(getToken, `${API_ROUTES.attribution}/source-roi?model=${model}`, SourceRoiResponseSchema);
+}
+export function getReconciliation(getToken: TokenGetter): Promise<ReconciliationResponse> {
+  return request(getToken, `${API_ROUTES.attribution}/reconciliation`, ReconciliationResponseSchema);
+}
+export function getAdPerformance(getToken: TokenGetter): Promise<AdPerformanceResponse> {
+  return request(getToken, `${API_ROUTES.ads}/performance`, AdPerformanceResponseSchema);
+}
+export function listAudienceSyncs(getToken: TokenGetter): Promise<AudienceSyncListResponse> {
+  return request(getToken, API_ROUTES.audiences, AudienceSyncListResponseSchema);
+}
+export function syncAudience(getToken: TokenGetter, segmentId: string, type: AudienceType): Promise<AudienceSyncDto> {
+  return request(getToken, `${API_ROUTES.audiences}/sync`, AudienceSyncSchema, { method: 'POST', body: JSON.stringify({ segmentId, type }) });
 }
 
 export function previewSegment(getToken: TokenGetter, rules: RuleGroup): Promise<SegmentPreviewResponse> {

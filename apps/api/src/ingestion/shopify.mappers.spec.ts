@@ -15,8 +15,25 @@ describe('shopify.mappers', () => {
       phone: '+919876543210',
       firstName: 'Jane',
       lastName: 'Doe',
+      acceptsMarketing: null,
     });
     expect(mapCustomer(null)).toBeNull();
+  });
+
+  it('mapCustomer reads marketing consent (new consent object + legacy boolean)', () => {
+    expect(mapCustomer({ id: 1, email: 'a@b.co', email_marketing_consent: { state: 'subscribed' } })?.acceptsMarketing).toBe(true);
+    expect(mapCustomer({ id: 2, email: 'c@d.co', email_marketing_consent: { state: 'unsubscribed' } })?.acceptsMarketing).toBe(false);
+    expect(mapCustomer({ id: 3, email: 'e@f.co', accepts_marketing: true })?.acceptsMarketing).toBe(true);
+    expect(mapCustomer({ id: 4, email: 'g@h.co' })?.acceptsMarketing).toBeNull(); // unknown → null
+  });
+
+  it('mapOrder captures first-touch UTMs from cart note_attributes', () => {
+    const order = mapOrder({
+      id: 5, created_at: '2026-03-01T00:00:00Z', total_price: '10.00', currency: 'INR', financial_status: 'paid',
+      note_attributes: [{ name: 'utm_source', value: 'facebook' }, { name: 'utm_campaign', value: 'spring' }],
+      line_items: [],
+    });
+    expect(order.attributes?.utm).toEqual({ source: 'facebook', campaign: 'spring' });
   });
 
   it('mapProduct takes id→externalId, title, first image', () => {

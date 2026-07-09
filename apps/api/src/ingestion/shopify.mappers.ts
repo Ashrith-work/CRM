@@ -1,6 +1,7 @@
 import type { FinancialStatus, OrderStatus } from '@crm/types';
 import { parseMinor } from '../common/money.util';
 import { normalizeE164 } from '../common/phone.util';
+import { extractShopifyAttribution, type OrderAttributes } from '../attribution/utm.util';
 
 /**
  * Shopify → CRM field mappers. PURE and shared by BOTH the backfill worker and
@@ -24,6 +25,8 @@ export interface MappedCustomer {
   phone: string | null;
   firstName: string | null;
   lastName: string | null;
+  /** Shopify marketing consent: true=subscribed, false=not, null=unknown. */
+  acceptsMarketing: boolean | null;
 }
 
 export function mapCustomer(raw: Raw | null | undefined): MappedCustomer | null {
@@ -35,7 +38,16 @@ export function mapCustomer(raw: Raw | null | undefined): MappedCustomer | null 
     phone: normalizeE164((raw.phone as string) ?? (addr?.phone as string) ?? null),
     firstName: str(raw.first_name),
     lastName: str(raw.last_name),
+    acceptsMarketing: mapAcceptsMarketing(raw),
   };
+}
+
+/** Read marketing consent from the new consent object or the legacy boolean. */
+export function mapAcceptsMarketing(raw: Raw): boolean | null {
+  const consent = raw.email_marketing_consent as Raw | undefined;
+  if (consent && typeof consent.state === 'string') return consent.state === 'subscribed';
+  if (typeof raw.accepts_marketing === 'boolean') return raw.accepts_marketing;
+  return null;
 }
 
 export interface MappedProduct {
@@ -87,6 +99,8 @@ export interface MappedOrder {
   discountCode: string | null;
   discountMinor: number;
   refundedMinor: number;
+  /** First-touch UTM/referrer ride-along from cart attributes (may be null). */
+  attributes: OrderAttributes | null;
   placedAt: Date;
   items: MappedLineItem[];
 }
@@ -107,6 +121,7 @@ export function mapOrder(raw: Raw): MappedOrder {
     discountCode: (discountCodes?.[0]?.code as string) ?? null,
     discountMinor: parseMinor(raw.total_discounts as string),
     refundedMinor: sumRefunds(raw.refunds as Raw[]),
+    attributes: extractShopifyAttribution(raw),
     placedAt: parseTime(raw.created_at as string) ?? new Date(),
     items: ((raw.line_items as Raw[]) ?? []).map(mapLineItem),
   };
@@ -167,6 +182,7 @@ export interface MappedCheckout {
   externalId: string;
   customer: MappedCustomer | null;
   contactEmail: string | null;
+  attributes: OrderAttributes | null;
   checkoutStartedAt: Date;
   items: MappedLineItem[];
 }
@@ -176,6 +192,7 @@ export function mapCheckout(raw: Raw): MappedCheckout {
     externalId: String(raw.token ?? raw.id),
     customer: mapCustomer(raw.customer as Raw),
     contactEmail: normalizeEmail(raw.email as string),
+    attributes: extractShopifyAttribution(raw),
     checkoutStartedAt: parseTime(raw.created_at as string) ?? new Date(),
     items: ((raw.line_items as Raw[]) ?? []).map(mapLineItem),
   };
