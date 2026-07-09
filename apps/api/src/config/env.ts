@@ -5,7 +5,12 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(4000),
-  CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:8081'),
+  // Default allow-list covers the web dev origin on :3000 AND :3001 (apps/web
+  // falls back to :3001 when :3000 is taken, e.g. by Grafana) plus the Expo dev
+  // server on :8081. Override per-environment with the real web origin(s).
+  CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:3000,http://localhost:3001,http://localhost:8081'),
 
   DATABASE_URL: z.string().url(),
   DIRECT_URL: z.string().url().optional(),

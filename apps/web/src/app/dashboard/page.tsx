@@ -4,14 +4,23 @@ import { useAuth } from '@clerk/nextjs';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { MeResponse } from '@crm/types';
-import { fetchMe } from '@/lib/api';
+import { fetchMe, ApiAuthError, ApiNetworkError } from '@/lib/api';
 import { Button } from '@/components/crm/ui';
 import { EmptyState } from '@/components/crm/EmptyState';
 
+/** network = never reached the API; auth = 401/re-sign-in; server = API errored (5xx/other). */
+type ErrorKind = 'network' | 'auth' | 'server';
+
 type State =
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; kind: ErrorKind; message: string }
   | { status: 'ready'; me: MeResponse };
+
+const ERROR_TITLES: Record<ErrorKind, string> = {
+  network: "Can't reach the server",
+  auth: 'Please sign in again',
+  server: 'Could not load your profile',
+};
 
 /** The four job-to-be-done entry points. */
 const JOBS: Array<{ label: string; description: string; href: string; icon: string }> = [
@@ -30,7 +39,9 @@ export default function DashboardPage() {
     try {
       setState({ status: 'ready', me: await fetchMe(getToken) });
     } catch (err) {
-      setState({ status: 'error', message: (err as Error).message });
+      const kind: ErrorKind =
+        err instanceof ApiNetworkError ? 'network' : err instanceof ApiAuthError ? 'auth' : 'server';
+      setState({ status: 'error', kind, message: (err as Error).message });
     }
   }, [getToken]);
 
@@ -57,8 +68,13 @@ export default function DashboardPage() {
 
       {state.status === 'error' && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-          <p className="font-medium">Could not load your profile.</p>
+          <p className="font-medium">{ERROR_TITLES[state.kind]}</p>
           <p className="mt-1 break-words">{state.message}</p>
+          {state.kind === 'network' && (
+            <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80">
+              This usually means the API isn&apos;t running or is blocked by CORS — it is not a sign-in problem.
+            </p>
+          )}
           <button onClick={() => void load()} className="mt-3 rounded-md bg-red-600 px-3 py-1.5 text-white">
             Retry
           </button>

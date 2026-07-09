@@ -233,6 +233,29 @@ export class ApiAuthError extends Error {
 }
 
 /**
+ * Thrown when the request never reached the API and got no HTTP response —
+ * `fetch()` rejects with a `TypeError` when the server is down, the host/port
+ * is wrong, or a CORS policy blocks the response. This is DISTINCT from an auth
+ * (401) or server (5xx) error: those mean the API answered. Surfacing it
+ * separately stops the browser's opaque "Failed to fetch" from masking a
+ * down-server or CORS misconfiguration.
+ */
+export class ApiNetworkError extends Error {
+  /** The underlying fetch rejection (e.g. the original TypeError), for logging. */
+  readonly cause?: unknown;
+  /** The health endpoint to eyeball when this fires. */
+  readonly healthUrl = `${API_URL}${API_ROUTES.health}`;
+  constructor(cause?: unknown) {
+    super(
+      `Can't reach the server at ${API_URL}. Make sure the API is running ` +
+        `(check ${API_URL}${API_ROUTES.health}) and that it allows this origin.`,
+    );
+    this.name = 'ApiNetworkError';
+    this.cause = cause;
+  }
+}
+
+/**
  * Core request helper: fetches a fresh bearer token immediately before the call,
  * disables caching, validates the response against a shared zod schema, and —
  * critically — on a 401 refreshes the token (`getToken({ skipCache: true })`)
@@ -249,15 +272,22 @@ async function request<T>(
   const doFetch = async (skipCache: boolean): Promise<Response> => {
     const token = await getToken(skipCache ? { skipCache: true } : undefined);
     if (!token) throw new ApiAuthError();
-    return fetch(`${API_URL}${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-        ...init?.headers,
-      },
-      cache: 'no-store',
-    });
+    try {
+      return await fetch(`${API_URL}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+          ...init?.headers,
+        },
+        cache: 'no-store',
+      });
+    } catch (err) {
+      // fetch() only rejects when NO response arrived (server down, wrong
+      // host/port, or CORS block) — never for a 4xx/5xx. Translate the opaque
+      // "Failed to fetch" into an actionable network error.
+      throw new ApiNetworkError(err);
+    }
   };
 
   let res = await doFetch(false);
@@ -721,7 +751,11 @@ async function requestBlob(getToken: TokenGetter, path: string, init?: RequestIn
   const doFetch = async (skipCache: boolean): Promise<Response> => {
     const token = await getToken(skipCache ? { skipCache: true } : undefined);
     if (!token) throw new ApiAuthError();
-    return fetch(`${API_URL}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...init?.headers }, cache: 'no-store' });
+    try {
+      return await fetch(`${API_URL}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...init?.headers }, cache: 'no-store' });
+    } catch (err) {
+      throw new ApiNetworkError(err);
+    }
   };
   let res = await doFetch(false);
   if (res.status === 401) res = await doFetch(true);
