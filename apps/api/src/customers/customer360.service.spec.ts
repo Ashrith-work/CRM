@@ -1,6 +1,10 @@
 import { Customer360Service, serializeRecentOrder } from './customer360.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { RedisService } from '../redis/redis.service';
+import type { AuditService } from '../audit/audit.service';
+import { makePii } from '../common/crypto.testkit';
+
+const { pii } = makePii();
 
 function svc(order: { findMany?: jest.Mock } = {}, interaction: { findMany?: jest.Mock } = {}) {
   const prisma = {
@@ -9,7 +13,8 @@ function svc(order: { findMany?: jest.Mock } = {}, interaction: { findMany?: jes
     interaction: { findMany: interaction.findMany ?? jest.fn().mockResolvedValue([]) },
   } as unknown as PrismaService;
   const redis = { cacheGet: jest.fn().mockResolvedValue(null), cacheSet: jest.fn() } as unknown as RedisService;
-  return { service: new Customer360Service(prisma, redis), prisma };
+  const audit = { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+  return { service: new Customer360Service(prisma, redis, pii, audit), prisma };
 }
 
 describe('serializeRecentOrder', () => {

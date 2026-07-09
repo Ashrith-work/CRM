@@ -23,6 +23,26 @@ export const AssistantAskInput = z.object({
 export type AssistantAskInput = z.infer<typeof AssistantAskInput>;
 
 // ---------------------------------------------------------------------------
+// The PII boundary — the ONLY customer shape the AI (and external payloads) see.
+// customer_id + pseudonym + non-identifying fields. NO raw name/email/phone: the
+// type physically cannot carry them, so no prompt/payload builder can read them.
+// ---------------------------------------------------------------------------
+export const SafeCustomerSchema = z.object({
+  customerId: z.string(),
+  /** e.g. "Customer #8a2f10" — a stable label the AI reasons about. */
+  pseudonym: z.string(),
+  /** Non-identifying: the email DOMAIN only (e.g. "gmail.com"), never the address. */
+  emailDomain: z.string().nullable(),
+  rfmSegment: z.string().nullable(),
+  clvBand: z.string().nullable(),
+  churnBand: z.string().nullable(),
+  vipTier: z.string().nullable(),
+  orderCount: z.number().int(),
+  netRevenueMinor: z.number().int(),
+});
+export type SafeCustomer = z.infer<typeof SafeCustomerSchema>;
+
+// ---------------------------------------------------------------------------
 // Citations — every metric named in an answer resolves from the glossary.
 // ---------------------------------------------------------------------------
 export const AssistantCitationSchema = z.object({

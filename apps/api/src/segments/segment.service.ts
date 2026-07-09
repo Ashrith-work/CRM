@@ -8,6 +8,7 @@ import type {
 } from '@crm/types';
 import { Prisma, type Segment as SegmentRow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CustomerPiiService } from '../customers/customer-pii.service';
 import { maskEmail } from '../common/pii.util';
 import { translateRules } from './segment.engine';
 
@@ -21,7 +22,10 @@ const SAMPLE_SIZE = 20;
  */
 @Injectable()
 export class SegmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pii: CustomerPiiService,
+  ) {}
 
   private where(organizationId: string, rules: RuleGroup): Prisma.CustomerFeaturesWhereInput {
     return { organizationId, AND: [translateRules(rules)] };
@@ -112,11 +116,13 @@ export class SegmentService {
     const byId = new Map(customers.map((c) => [c.id, c]));
     return features.map((f) => {
       const c = byId.get(f.customerId);
-      const name = c ? [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || c.externalId || f.customerId : f.customerId;
+      // Decrypt server-side for this human-facing (RBAC-gated) sample.
+      const revealed = c ? this.pii.reveal(c) : null;
+      const name = c && revealed ? (this.pii.revealName(c) ?? '') || revealed.email || c.externalId || f.customerId : f.customerId;
       return {
         customerId: f.customerId,
         name,
-        email: c ? (unmasked ? c.email : maskEmail(c.email)) : null,
+        email: revealed ? (unmasked ? revealed.email : maskEmail(revealed.email)) : null,
         netRevenueMinor: f.netRevenueMinor,
         rSegment: f.rSegment,
       };

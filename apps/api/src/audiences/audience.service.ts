@@ -3,6 +3,7 @@ import type { AudienceSyncDto, AudienceType, SyncAudienceInput } from '@crm/type
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { MarketingConsentGate } from '../campaigns/marketing-consent-gate.service';
+import { CustomerPiiService } from '../customers/customer-pii.service';
 import { hashEmail, hashPhone } from '../common/hash.util';
 import { MetaService } from '../ads/meta.service';
 import { MetaConnectService } from '../ads/meta-connect.service';
@@ -34,6 +35,7 @@ export class AudienceService {
     private readonly gate: MarketingConsentGate,
     private readonly meta: MetaService,
     private readonly connect: MetaConnectService,
+    private readonly pii: CustomerPiiService,
   ) {}
 
   async list(organizationId: string): Promise<AudienceSyncDto[]> {
@@ -59,13 +61,15 @@ export class AudienceService {
     const members: ConsentedMember[] = [];
     let excluded = 0;
     for (const c of customers) {
+      // Decrypt (authorized, server-side, for the consented upload only).
+      const { email, phone } = this.pii.reveal({ email: c.email, phone: c.phone, firstName: null, lastName: null });
       // The gate requires an email to check suppression; no email → not eligible.
-      const eligible = c.email ? await this.gate.isEligible(organizationId, c.id, c.email) : false;
+      const eligible = email ? await this.gate.isEligible(organizationId, c.id, email) : false;
       if (!eligible) {
         excluded += 1;
         continue;
       }
-      members.push({ customerId: c.id, email: c.email, phone: c.phone });
+      members.push({ customerId: c.id, email, phone });
     }
     return { members, excluded };
   }

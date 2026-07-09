@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { RuleGroupSchema, type RuleGroup } from '@crm/types';
-import { maskEmail } from '../../common/pii.util';
 import { translateRules } from '../../segments/segment.engine';
 import type { Prisma } from '@prisma/client';
 import type { AssistantTool, ToolContext, ToolResult } from './tool.types';
@@ -65,16 +64,11 @@ const countCustomers: AssistantTool = {
 };
 
 // ---------------------------------------------------------------------------
-// top_customers — the top N by a whitelisted metric (masked contact).
+// top_customers — the top N by a whitelisted metric (PSEUDONYMIZED).
 // ---------------------------------------------------------------------------
-const TOP_BY: Record<string, { col: 'netRevenueMinor' | 'orderCount' | 'clvMinor'; metricKey: string }> = {
-  net_revenue: { col: 'netRevenueMinor', metricKey: 'net_revenue' },
-  orders: { col: 'orderCount', metricKey: 'order_count' },
-  clv: { col: 'clvMinor', metricKey: 'clv' },
-};
 const topCustomers: AssistantTool = {
   name: 'top_customers',
-  description: 'List the top N customers ranked by net_revenue, orders, or clv. Returns name, masked contact, and the value.',
+  description: 'List the top N customers ranked by net_revenue, orders, or clv. Returns PSEUDONYMS (Customer #…) + non-identifying fields only — never names or contact.',
   metricKeys: ['net_revenue', 'order_count', 'clv'],
   paramsSchema: z.object({
     by: z.enum(['net_revenue', 'orders', 'clv']).default('net_revenue'),
@@ -89,27 +83,9 @@ const topCustomers: AssistantTool = {
     required: [],
   },
   async execute(ctx: ToolContext, params: unknown): Promise<ToolResult> {
-    const { by, n } = params as { by: keyof typeof TOP_BY; n: number };
-    const cfg = TOP_BY[by];
-    const feats = await ctx.prisma.customerFeatures.findMany({
-      where: { organizationId: ctx.organizationId, [cfg.col]: { not: null } },
-      orderBy: { [cfg.col]: 'desc' },
-      take: n,
-    });
-    const customers = await ctx.prisma.customer.findMany({
-      where: { organizationId: ctx.organizationId, id: { in: feats.map((f) => f.customerId) } },
-    });
-    const byId = new Map(customers.map((c) => [c.id, c]));
-    const rows = feats.map((f) => {
-      const c = byId.get(f.customerId);
-      const name = c ? [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || f.customerId : f.customerId;
-      return {
-        name,
-        email: c ? (ctx.unmaskedPii ? c.email : maskEmail(c.email)) : null,
-        value: (f as Record<string, unknown>)[cfg.col] ?? 0,
-        metric: by,
-      };
-    });
+    const { by, n } = params as { by: 'net_revenue' | 'orders' | 'clv'; n: number };
+    // The PII boundary: only pseudonymized SafeCustomers cross into the AI path.
+    const rows = await ctx.aiSafe.topCustomers(ctx.organizationId, by, n);
     return { data: { by, rows }, rowCount: rows.length };
   },
 };
@@ -197,7 +173,7 @@ const clvDistribution: AssistantTool = {
 // ---------------------------------------------------------------------------
 const churnWatchlist: AssistantTool = {
   name: 'churn_watchlist',
-  description: 'Customers most at risk of churning (High/Medium churn band), ranked by value. Contact is masked unless you have pii:read.',
+  description: 'Customers most at risk of churning (High/Medium churn band), ranked by value. Returns PSEUDONYMS + non-identifying fields only.',
   metricKeys: ['churn_risk', 'clv'],
   paramsSchema: z.object({ limit: z.number().int().min(1).max(50).default(20) }),
   inputSchema: {
@@ -207,10 +183,10 @@ const churnWatchlist: AssistantTool = {
   },
   async execute(ctx: ToolContext, params: unknown): Promise<ToolResult> {
     const { limit } = params as { limit: number };
-    const watch = await ctx.analytics.churnWatchlist(ctx.organizationId, ctx.unmaskedPii, limit);
+    const rows = await ctx.aiSafe.churnWatchlist(ctx.organizationId, limit);
     return {
-      data: watch,
-      rowCount: watch.data.length,
+      data: { rows },
+      rowCount: rows.length,
       segmentHandoff: {
         label: 'At-risk customers (High/Medium churn)',
         rules: { op: 'OR', rules: [{ field: 'churnBand', op: 'eq', value: 'High' }, { field: 'churnBand', op: 'eq', value: 'Medium' }] },
@@ -248,9 +224,11 @@ const segmentPreview: AssistantTool = {
   inputSchema: { type: 'object', properties: { ruleTree: RULE_TREE_JSON_SCHEMA }, required: ['ruleTree'] },
   async execute(ctx: ToolContext, params: unknown): Promise<ToolResult> {
     const { ruleTree } = params as { ruleTree: RuleGroup };
-    const preview = await ctx.segments.preview(ctx.organizationId, ruleTree, ctx.unmaskedPii);
+    // Count via the segment engine; the sample is PSEUDONYMIZED via the boundary.
+    const preview = await ctx.segments.preview(ctx.organizationId, ruleTree, false);
+    const sample = await ctx.aiSafe.forCustomerIds(ctx.organizationId, preview.sample.slice(0, 5).map((s) => s.customerId));
     return {
-      data: { count: preview.count, sampleSize: preview.sample.length, sample: preview.sample.slice(0, 5) },
+      data: { count: preview.count, sampleSize: sample.length, sample },
       rowCount: preview.count,
       segmentHandoff: { label: 'Previewed segment', rules: ruleTree },
     };
@@ -262,29 +240,15 @@ const segmentPreview: AssistantTool = {
 // ---------------------------------------------------------------------------
 const customerSummary: AssistantTool = {
   name: 'customer_summary',
-  description: 'A single customer’s summary by customerId: spend, orders, RFM segment, CLV band, churn band. Contact is masked unless you have pii:read.',
+  description: 'A single customer’s summary by customerId: spend, orders, RFM segment, CLV band, churn band, VIP tier — PSEUDONYMIZED (no name/contact).',
   metricKeys: ['net_revenue', 'order_count', 'rfm', 'clv', 'churn_risk'],
   paramsSchema: z.object({ customerId: z.string().min(1) }),
   inputSchema: { type: 'object', properties: { customerId: { type: 'string' } }, required: ['customerId'] },
   async execute(ctx: ToolContext, params: unknown): Promise<ToolResult> {
     const { customerId } = params as { customerId: string };
-    const f = await ctx.prisma.customerFeatures.findFirst({ where: { organizationId: ctx.organizationId, customerId } });
-    if (!f) return { data: { found: false }, rowCount: 0 };
-    const c = await ctx.prisma.customer.findFirst({ where: { organizationId: ctx.organizationId, id: customerId } });
-    return {
-      data: {
-        found: true,
-        name: c ? [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || customerId : customerId,
-        email: c ? (ctx.unmaskedPii ? c.email : maskEmail(c.email)) : null,
-        netRevenueMinor: f.netRevenueMinor,
-        orderCount: f.orderCount,
-        rSegment: f.rSegment,
-        clvBand: f.clvBand,
-        churnBand: f.churnBand,
-        daysSinceLast: f.daysSinceLast,
-      },
-      rowCount: 1,
-    };
+    const safe = await ctx.aiSafe.customerSummary(ctx.organizationId, customerId);
+    if (!safe) return { data: { found: false }, rowCount: 0 };
+    return { data: { found: true, ...safe }, rowCount: 1 };
   },
 };
 

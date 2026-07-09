@@ -1,11 +1,14 @@
 import { MetaSyncService } from './meta-sync.service';
 import type { MetaService } from './meta.service';
+import { makePii } from '../common/crypto.testkit';
+
+const { pii } = makePii();
 
 describe('MetaSyncService.upsertMetric (idempotent)', () => {
   it('upserts on the UNIQUE(org, entityType, entityId, date) key so a re-pull OVERWRITES', async () => {
     const upsert = jest.fn().mockResolvedValue({});
     const prisma = { adMetricDaily: { upsert } };
-    const svc = new MetaSyncService(prisma as never, {} as MetaService);
+    const svc = new MetaSyncService(prisma as never, {} as MetaService, pii);
     const metric = { entityType: 'campaign' as const, entityId: 'c1', date: new Date('2026-07-01T00:00:00Z'), spendMinor: 123450, impressions: 1000, clicks: 40, conversions: 3 };
 
     await svc.upsertMetric('org1', metric, 'INR');
@@ -33,7 +36,7 @@ describe('MetaSyncService.linkLeadConversions', () => {
       order: { count: jest.fn().mockResolvedValue(opts.paidOrders) },
       touchpoint: { update: touchpointUpdate },
     };
-    const svc = new MetaSyncService(prisma as never, {} as MetaService);
+    const svc = new MetaSyncService(prisma as never, {} as MetaService, pii);
     return { svc, adLeadUpdate, touchpointUpdate };
   }
 

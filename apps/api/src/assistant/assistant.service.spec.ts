@@ -42,6 +42,7 @@ function build(overrides: {
     orchestrator as never,
     {} as never,
     {} as never,
+    {} as never,
     config as never,
   );
   return { svc, cacheGet, cacheSet, run, aiQueryCreate, auditLogCreate };

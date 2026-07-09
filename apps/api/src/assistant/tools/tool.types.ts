@@ -2,6 +2,7 @@ import type { ZodSchema } from 'zod';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { AnalyticsService } from '../../analytics/analytics.service';
 import type { SegmentService } from '../../segments/segment.service';
+import type { AiSafeCustomerRepository } from '../../customers/ai-safe-customer.repository';
 
 /**
  * Everything a safe tool is allowed to touch. Crucially it carries the asker's
@@ -18,6 +19,8 @@ export interface ToolContext {
   prisma: PrismaService;
   analytics: AnalyticsService;
   segments: SegmentService;
+  /** The PII boundary — the ONLY way tools may touch customers (pseudonymized). */
+  aiSafe: AiSafeCustomerRepository;
 }
 
 export interface ToolResult {

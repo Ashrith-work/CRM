@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { CustomersModule } from '../customers/customers.module';
 import { AssistantController } from './assistant.controller';
 import { AssistantService } from './assistant.service';
 import { GroundingService } from './grounding.service';
@@ -16,7 +17,7 @@ import { ASSISTANT_QUEUE } from './assistant.constants';
  * LLM orchestrator, caching, and audit. No mutation path exists.
  */
 @Module({
-  imports: [AnalyticsModule, BullModule.registerQueue({ name: ASSISTANT_QUEUE })],
+  imports: [AnalyticsModule, CustomersModule, BullModule.registerQueue({ name: ASSISTANT_QUEUE })],
   controllers: [AssistantController],
   providers: [AssistantService, GroundingService, AnthropicService, AssistantOrchestrator, EmbedGlossaryProcessor],
 })

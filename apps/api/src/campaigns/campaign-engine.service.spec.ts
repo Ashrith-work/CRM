@@ -4,6 +4,7 @@ import { MarketingConsentGate } from './marketing-consent-gate.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuditService } from '../audit/audit.service';
 import type { ResendAdapter } from '../messaging/resend.adapter';
+import { makePii } from '../common/crypto.testkit';
 
 jest.setTimeout(60_000); // DB-backed.
 
@@ -13,7 +14,8 @@ const gate = new MarketingConsentGate(prisma as unknown as PrismaService, audit)
 // A fake channel whose send() we swap per test to simulate success / outage.
 const adapter = { channel: 'EMAIL' as const, send: jest.fn() };
 const config = { get: (k: string) => ({ ABANDONED_CART_THRESHOLD_MINUTES: 60, APP_BASE_URL: 'http://x', UNSUBSCRIBE_SECRET: 'test' })[k] } as never;
-const engine = new CampaignEngine(prisma as unknown as PrismaService, gate, adapter as unknown as ResendAdapter, config);
+const { pii } = makePii();
+const engine = new CampaignEngine(prisma as unknown as PrismaService, gate, adapter as unknown as ResendAdapter, pii, config);
 
 const SLUG = 'recovery-eng';
 let orgId: string;

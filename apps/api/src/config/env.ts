@@ -11,6 +11,18 @@ const envSchema = z.object({
   DIRECT_URL: z.string().url().optional(),
   REDIS_URL: z.string().default('redis://localhost:6379'),
 
+  // PII protection. In production these MUST come from the vault (a boot check
+  // warns when the dev defaults are in use). ENCRYPTION_KEY encrypts PII at rest
+  // (AES-256-GCM); HASH_PEPPER keys the deterministic match-hashes (HMAC-SHA256).
+  // 32-byte key as hex (64 chars) or base64. Key versioning enables rotation:
+  // ENCRYPTION_KEY is the CURRENT version; ENCRYPTION_KEY_PREVIOUS decrypts rows
+  // still under the old version during a re-encrypt job.
+  ENCRYPTION_KEY: z.string().default('dev-only-insecure-encryption-key-change-me'),
+  ENCRYPTION_KEY_VERSION: z.coerce.number().int().min(1).default(1),
+  ENCRYPTION_KEY_PREVIOUS: z.string().optional(),
+  ENCRYPTION_KEY_PREVIOUS_VERSION: z.coerce.number().int().min(1).optional(),
+  HASH_PEPPER: z.string().default('dev-only-insecure-hash-pepper-change-me'),
+
   CLERK_SECRET_KEY: z.string().min(1),
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
   CLERK_JWT_KEY: z.string().optional(),

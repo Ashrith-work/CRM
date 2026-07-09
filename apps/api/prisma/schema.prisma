@@ -174,10 +174,18 @@ model Customer {
   id             String    @id @default(cuid())
   organizationId String
   externalId     String? // Shopify customer id (guests may be null)
-  email          String? // normalized: trim + lowercase
-  phone          String? // normalized: E.164
-  firstName      String?
-  lastName       String?
+  // PII — ENCRYPTED at rest (AES-256-GCM ciphertext). Decrypted only in the API
+  // layer for RBAC-authorized human reads. Never matched on directly.
+  email          String? // ciphertext of normalized email
+  phone          String? // ciphertext of normalized E.164 phone
+  firstName      String? // ciphertext
+  lastName       String? // ciphertext
+  // Deterministic match-hashes (HMAC-SHA256 of the normalized value, peppered) —
+  // the SECONDARY index identity resolution + dedup match on. Never the store.
+  emailHash      String?
+  phoneHash      String?
+  // Non-PII derived value for the AI-safe view (e.g. "gmail.com").
+  emailDomain    String?
   /** Non-null when this row was merged INTO another (survivor). */
   mergedIntoId   String?
   createdAt      DateTime  @default(now())
@@ -187,8 +195,8 @@ model Customer {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, externalId])
-  @@unique([organizationId, email])
-  @@index([organizationId, phone])
+  @@unique([organizationId, emailHash])
+  @@index([organizationId, phoneHash])
   @@index([organizationId, mergedIntoId])
 }
 

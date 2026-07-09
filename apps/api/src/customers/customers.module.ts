@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { IdentityService } from './identity.service';
+import { AiSafeCustomerRepository } from './ai-safe-customer.repository';
 import { CustomersController } from './customers.controller';
 import { Customer360Service } from './customer360.service';
 import { Customer360Controller } from './customer360.controller';
@@ -15,7 +16,7 @@ import { EXPORT_QUEUE } from './export.constants';
 @Module({
   imports: [BullModule.registerQueue({ name: EXPORT_QUEUE })],
   controllers: [CustomersController, Customer360Controller],
-  providers: [IdentityService, Customer360Service, ExperienceExportService, ExportProcessor],
-  exports: [IdentityService],
+  providers: [IdentityService, AiSafeCustomerRepository, Customer360Service, ExperienceExportService, ExportProcessor],
+  exports: [IdentityService, AiSafeCustomerRepository],
 })
 export class CustomersModule {}

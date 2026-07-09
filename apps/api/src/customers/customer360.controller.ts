@@ -58,7 +58,7 @@ export class Customer360Controller {
   @Get(':id')
   @RequirePermission(PERMISSIONS.COMMERCE_READ)
   async get(@CurrentUser() ctx: UserContext, @Param('id') id: string): Promise<Customer360> {
-    return this.customers.get360(ctx.organization.id, id, canSeeUnmaskedPii(ctx.permissions));
+    return this.customers.get360(ctx.organization.id, id, canSeeUnmaskedPii(ctx.permissions), ctx.user.id);
   }
 
   @Get(':id/timeline')

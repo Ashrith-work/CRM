@@ -14,6 +14,7 @@ import { canSeeUnmaskedPii } from '../common/pii.util';
 import type { Env } from '../config/env';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { SegmentService } from '../segments/segment.service';
+import { AiSafeCustomerRepository } from '../customers/ai-safe-customer.repository';
 import { GroundingService } from './grounding.service';
 import { AssistantOrchestrator } from './orchestrator';
 import { answerCacheKey } from './assistant.constants';
@@ -36,6 +37,7 @@ export class AssistantService {
     private readonly orchestrator: AssistantOrchestrator,
     private readonly analytics: AnalyticsService,
     private readonly segments: SegmentService,
+    private readonly aiSafe: AiSafeCustomerRepository,
     private readonly config: ConfigService<Env, true>,
   ) {}
 
@@ -62,6 +64,7 @@ export class AssistantService {
       prisma: this.prisma,
       analytics: this.analytics,
       segments: this.segments,
+      aiSafe: this.aiSafe,
     };
     const result = await this.orchestrator.run(question, ctx, glossary);
 

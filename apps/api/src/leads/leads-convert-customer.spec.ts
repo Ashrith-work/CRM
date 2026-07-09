@@ -1,4 +1,7 @@
 import { LeadsService } from './leads.service';
+import { makePii } from '../common/crypto.testkit';
+
+const { pii } = makePii();
 
 /**
  * Lead → Customer conversion (the gap this milestone fills). The existing
@@ -51,12 +54,12 @@ function build(opts: { lead?: Record<string, unknown>; existingCustomer?: boolea
     interaction: { upsert: interactionUpsert },
     $transaction: jest.fn().mockImplementation(async (cb: (t: typeof tx) => unknown) => cb(tx)),
   };
-  const identity = { resolveCustomer: jest.fn().mockResolvedValue('cust1') };
+  const identity = { resolveCustomer: jest.fn().mockResolvedValue('cust1'), serialize: (row: { id: string }) => row };
   const contacts = { get: jest.fn().mockResolvedValue({ id: 'contact1' }) };
   const companies = { get: jest.fn(), create: jest.fn() };
   const tags = { tagsForEntities: jest.fn().mockResolvedValue(new Map()) };
   const activity = { emit: jest.fn().mockResolvedValue(undefined) };
-  const svc = new LeadsService(prisma as never, activity as never, tags as never, {} as never, contacts as never, companies as never, identity as never);
+  const svc = new LeadsService(prisma as never, activity as never, tags as never, {} as never, contacts as never, companies as never, identity as never, pii as never);
   return { svc, prisma, identity, touchpointUpdateMany, interactionUpsert, leadUpdate };
 }
 

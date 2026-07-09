@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { normalizeEmail } from '../ingestion/shopify.mappers';
-import { normalizeE164 } from '../common/phone.util';
+import { CustomerPiiService } from '../customers/customer-pii.service';
 import { MetaService, type MetaConn } from './meta.service';
 import { mapAd, mapAdSet, mapCampaign, mapCreative, mapInsight, mapLead, type MappedMetric } from './meta.mappers';
 
@@ -15,7 +14,11 @@ export class MetaSyncService {
   private readonly logger = new Logger(MetaSyncService.name);
   private static readonly METRIC_WINDOW_DAYS = 7;
 
-  constructor(private readonly prisma: PrismaService, private readonly meta: MetaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly meta: MetaService,
+    private readonly pii: CustomerPiiService,
+  ) {}
 
   /** Pull the hierarchy + daily insights for a connected org. Returns counts. */
   async pullMetrics(organizationId: string, conn: MetaConn, now = new Date()): Promise<{ entities: number; metrics: number }> {
@@ -122,11 +125,12 @@ export class MetaSyncService {
     });
     let converted = 0;
     for (const lead of leads) {
-      const email = normalizeEmail(lead.email);
-      const phone = normalizeE164(lead.phone);
+      // Match on the deterministic hashes (email/phone are encrypted at rest).
+      const emailHash = this.pii.emailHashOf(lead.email);
+      const phoneHash = this.pii.phoneHashOf(lead.phone);
       const or: Array<Record<string, string>> = [];
-      if (email) or.push({ email });
-      if (phone) or.push({ phone });
+      if (emailHash) or.push({ emailHash });
+      if (phoneHash) or.push({ phoneHash });
       if (or.length === 0) continue;
 
       const customer = await this.prisma.customer.findFirst({

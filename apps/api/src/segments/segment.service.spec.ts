@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { SegmentService } from './segment.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { RuleGroup } from '@crm/types';
+import { makePii } from '../common/crypto.testkit';
 
 /**
  * DB-backed segment tests: preview count/sample correctness + < 2s latency, and
@@ -11,7 +12,7 @@ import type { RuleGroup } from '@crm/types';
 jest.setTimeout(60_000); // DB-backed; can be slow under parallel load.
 
 const prisma = new PrismaClient();
-const service = new SegmentService(prisma as unknown as PrismaService);
+const service = new SegmentService(prisma as unknown as PrismaService, makePii().pii);
 const SLUG = 'golden-seg';
 
 let orgId: string;

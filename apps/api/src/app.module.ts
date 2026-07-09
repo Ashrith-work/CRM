@@ -4,6 +4,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { validateEnv } from './config/env';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { CryptoModule } from './common/crypto.module';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './audit/audit.module';
 import { HealthModule } from './health/health.module';
@@ -48,6 +49,7 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     }),
     PrismaModule,
     RedisModule,
+    CryptoModule,
     AuthModule,
     AuditModule,
     HealthModule,

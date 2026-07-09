@@ -10,6 +10,7 @@ import {
   type RevenueTrendResponse,
 } from '@crm/types';
 import { PrismaService } from '../prisma/prisma.service';
+import { CustomerPiiService } from '../customers/customer-pii.service';
 import { maskEmail } from '../common/pii.util';
 
 /**
@@ -18,7 +19,10 @@ import { maskEmail } from '../common/pii.util';
  */
 @Injectable()
 export class AnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pii: CustomerPiiService,
+  ) {}
 
   async summary(organizationId: string): Promise<AnalyticsSummary> {
     const scoredWhere = { organizationId, rScore: { not: null } };
@@ -120,11 +124,13 @@ export class AnalyticsService {
       currency: await this.currencyFor(organizationId),
       data: top.map((f) => {
         const c = byId.get(f.customerId);
-        const name = c ? [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || c.externalId || f.customerId : f.customerId;
+        // Decrypt server-side for this human-facing (RBAC-gated) watchlist.
+        const revealed = c ? this.pii.reveal(c) : null;
+        const name = c && revealed ? (this.pii.revealName(c) ?? '') || revealed.email || c.externalId || f.customerId : f.customerId;
         return {
           customerId: f.customerId,
           name,
-          email: c ? (unmasked ? c.email : maskEmail(c.email)) : null,
+          email: revealed ? (unmasked ? revealed.email : maskEmail(revealed.email)) : null,
           churnBand: (f.churnBand ?? 'Unknown') as ChurnWatchlistResponse['data'][number]['churnBand'],
           churnRisk: f.churnRisk,
           clvBand: f.clvBand,

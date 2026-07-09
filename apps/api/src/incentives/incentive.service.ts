@@ -12,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MarketingConsentGate } from '../campaigns/marketing-consent-gate.service';
 import { ResendAdapter } from '../messaging/resend.adapter';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { CustomerPiiService } from '../customers/customer-pii.service';
+import { maskEmail } from '../common/pii.util';
 import { ShopifyDiscountService } from './shopify-discount.service';
 
 export interface IncentiveOrder {
@@ -46,6 +48,7 @@ export class IncentiveService {
     private readonly gate: MarketingConsentGate,
     private readonly email: ResendAdapter,
     private readonly loyalty: LoyaltyService,
+    private readonly pii: CustomerPiiService,
   ) {}
 
   // ----- config -----------------------------------------------------------
@@ -222,16 +225,18 @@ export class IncentiveService {
   // ----- notify (consent-gated) -------------------------------------------
   /** Notify the customer of their reward — ONLY with marketing consent. */
   async notify(organizationId: string, customerId: string, incentive: IncentiveRow): Promise<void> {
-    const customer = await this.prisma.customer.findFirst({ where: { organizationId, id: customerId }, select: { email: true } });
-    if (!customer?.email) return; // no address → the code just attaches silently in Shopify
-    const decision = await this.gate.canSend(organizationId, customerId, customer.email);
+    const row = await this.prisma.customer.findFirst({ where: { organizationId, id: customerId }, select: { email: true } });
+    const email = this.pii.reveal({ email: row?.email ?? null, phone: null, firstName: null, lastName: null }).email;
+    if (!email) return; // no address → the code just attaches silently in Shopify
+    const decision = await this.gate.canSend(organizationId, customerId, email);
     if (!decision.allowed) {
-      this.logger.log(`Reward notification suppressed for ${customer.email}: ${decision.reason} (code still attaches in Shopify)`);
+      // Never log plaintext PII — mask it.
+      this.logger.log(`Reward notification suppressed for ${maskEmail(email)}: ${decision.reason} (code still attaches in Shopify)`);
       return;
     }
     const body = `Use code ${incentive.discountCode} for ₹${(incentive.discountValueMinor ?? 0) / 100} off your next order over ₹${incentive.minNextOrderMinor / 100}. Valid until ${incentive.validUntil.toISOString().slice(0, 10)}.`;
     await this.email
-      .send({ to: customer.email, subject: 'You’ve earned a reward 🎁', text: body, html: `<p>${body}</p>` })
+      .send({ to: email, subject: 'You’ve earned a reward 🎁', text: body, html: `<p>${body}</p>` })
       .catch((e) => this.logger.warn(`Reward email failed: ${(e as Error).message}`));
   }
 

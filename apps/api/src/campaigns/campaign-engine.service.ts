@@ -6,6 +6,7 @@ import type { Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarketingConsentGate } from './marketing-consent-gate.service';
 import { ResendAdapter } from '../messaging/resend.adapter';
+import { CustomerPiiService } from '../customers/customer-pii.service';
 
 type StepWithTemplate = Prisma.CampaignStepGetPayload<{ include: { template: true } }>;
 
@@ -29,6 +30,7 @@ export class CampaignEngine {
     private readonly prisma: PrismaService,
     private readonly gate: MarketingConsentGate,
     private readonly email: ResendAdapter,
+    private readonly pii: CustomerPiiService,
     config: ConfigService<Env, true>,
   ) {
     this.thresholdMinutes = config.get('ABANDONED_CART_THRESHOLD_MINUTES', { infer: true });
@@ -60,7 +62,8 @@ export class CampaignEngine {
     if (!fresh.length) return 0;
 
     const customers = await this.prisma.customer.findMany({ where: { organizationId: campaign.organizationId, id: { in: [...new Set(fresh.map((c) => c.customerId!))] }, deletedAt: null }, select: { id: true, email: true } });
-    const emailById = new Map(customers.map((c) => [c.id, c.email]));
+    // Decrypt server-side so the enrollment snapshot + gate + send use a real address.
+    const emailById = new Map(customers.map((c) => [c.id, this.pii.reveal({ email: c.email, phone: null, firstName: null, lastName: null }).email]));
 
     const rows: Prisma.CampaignEnrollmentCreateManyInput[] = [];
     for (const cart of fresh) {

@@ -22,7 +22,8 @@ import { TagsService } from '../tags/tags.service';
 import { CustomFieldsService } from '../custom-fields/custom-fields.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { CompaniesService } from '../companies/companies.service';
-import { IdentityService, serializeCustomer } from '../customers/identity.service';
+import { IdentityService } from '../customers/identity.service';
+import { CustomerPiiService } from '../customers/customer-pii.service';
 import { cursorArgs, resolveOrderBy, toPage } from '../common/list.util';
 
 const SORTABLE = ['firstName', 'lastName', 'status', 'createdAt', 'updatedAt'] as const;
@@ -37,6 +38,7 @@ export class LeadsService {
     private readonly contacts: ContactsService,
     private readonly companies: CompaniesService,
     private readonly identity: IdentityService,
+    private readonly pii: CustomerPiiService,
   ) {}
 
   async list(
@@ -282,8 +284,8 @@ export class LeadsService {
           deletedAt: null,
           mergedIntoId: null,
           OR: [
-            ...(lead.email ? [{ email: lead.email.toLowerCase() }] : []),
-            ...(lead.phone ? [{ phone: lead.phone }] : []),
+            ...(this.pii.emailHashOf(lead.email) ? [{ emailHash: this.pii.emailHashOf(lead.email)! }] : []),
+            ...(this.pii.phoneHashOf(lead.phone) ? [{ phoneHash: this.pii.phoneHashOf(lead.phone)! }] : []),
           ],
         },
         select: { id: true },
@@ -336,7 +338,7 @@ export class LeadsService {
     });
 
     const customer = customerId
-      ? serializeCustomer(await this.prisma.customer.findUniqueOrThrow({ where: { id: customerId } }))
+      ? this.identity.serialize(await this.prisma.customer.findUniqueOrThrow({ where: { id: customerId } }))
       : null;
 
     return {

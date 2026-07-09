@@ -1,4 +1,7 @@
 import { IncentiveService } from './incentive.service';
+import { makePii } from '../common/crypto.testkit';
+
+const { pii } = makePii();
 
 const CONFIG_DEFAULTS: Record<string, unknown> = {
   INCENTIVE_TRIGGER_METRIC: 'orders',
@@ -32,7 +35,7 @@ function build(overrides: {
   const email = { send: jest.fn().mockResolvedValue({ providerMessageId: 'm1' }) };
   const loyalty = { burn: jest.fn().mockResolvedValue(undefined) };
   const config = { get: (k: string) => cfg[k] };
-  const svc = new IncentiveService(prisma as never, config as never, discounts as never, gate as never, email as never, loyalty as never);
+  const svc = new IncentiveService(prisma as never, config as never, discounts as never, gate as never, email as never, loyalty as never, pii as never);
   return { svc, prisma, discounts, gate, email, loyalty, incentiveCreate, incentiveUpdate, incentiveUpdateMany };
 }
 

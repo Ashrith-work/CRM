@@ -4,6 +4,9 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { RedisService } from '../redis/redis.service';
 import type { AuditService } from '../audit/audit.service';
 import type { Queue } from 'bullmq';
+import { makePii } from '../common/crypto.testkit';
+
+const { pii } = makePii();
 
 function build() {
   const create = jest.fn().mockResolvedValue({});
@@ -16,7 +19,7 @@ function build() {
   } as unknown as PrismaService;
   const redis = { cacheGet: jest.fn(), cacheSet: jest.fn() } as unknown as RedisService;
   const audit = { record } as unknown as AuditService;
-  const service = new ExperienceExportService(prisma, redis, audit, { add: jest.fn() } as unknown as Queue);
+  const service = new ExperienceExportService(prisma, redis, audit, pii, { add: jest.fn() } as unknown as Queue);
   return { service, create, record };
 }
 

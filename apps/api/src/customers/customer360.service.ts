@@ -12,10 +12,14 @@ import type {
 import { Prisma, type Customer as CustomerRow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { AuditService } from '../audit/audit.service';
+import { CustomerPiiService } from './customer-pii.service';
 import { maskEmail, maskPhone } from '../common/pii.util';
 
 const PROFILE_TTL_SECONDS = 60;
 const LIST_SORTS = new Set(['netRevenueMinor', 'orderCount', 'lastOrderAt']);
+// Name search can't push down to SQL over encrypted columns; cap the decrypt-scan.
+const SEARCH_SCAN_CAP = 1000;
 
 /**
  * Customer 360 reads: a cached profile (identity + consents + denormalized
@@ -28,27 +32,45 @@ export class Customer360Service {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly pii: CustomerPiiService,
+    private readonly audit: AuditService,
   ) {}
 
   // ----- Profile (cached) -------------------------------------------------
-  async get360(organizationId: string, id: string, unmasked: boolean): Promise<Customer360> {
+  async get360(organizationId: string, id: string, unmasked: boolean, actorUserId?: string): Promise<Customer360> {
     const customer = await this.resolveSurvivor(organizationId, id);
-    const key = `c360:${organizationId}:${customer.id}:${unmasked ? 'u' : 'm'}`;
-
-    const cached = await this.redis.cacheGet<Customer360>(key);
-    if (cached) return cached;
+    // Only the MASKED profile is cached; the unmasked (decrypted) profile is
+    // rebuilt each read so raw PII never rests in Redis and every access audits.
+    const key = `c360:${organizationId}:${customer.id}:m`;
+    if (!unmasked) {
+      const cached = await this.redis.cacheGet<Customer360>(key);
+      if (cached) return cached;
+    }
 
     const features = await this.prisma.customerFeatures.findUnique({
       where: { organizationId_customerId: { organizationId, customerId: customer.id } },
     });
 
+    // Decrypt in the API layer only — for an authorized (unmasked) human read.
+    const revealed = this.pii.reveal(customer);
+    if (unmasked) {
+      await this.audit.record({
+        organizationId,
+        actorUserId: actorUserId ?? null,
+        action: 'customer.pii.reveal',
+        entity: 'Customer',
+        entityId: customer.id,
+        after: { surface: 'customer360', fields: ['email', 'phone', 'name'] },
+      });
+    }
+
     const payload: Customer360 = {
       id: customer.id,
       externalId: customer.externalId,
-      email: unmasked ? customer.email : maskEmail(customer.email),
-      phone: unmasked ? customer.phone : maskPhone(customer.phone),
-      firstName: customer.firstName,
-      lastName: customer.lastName,
+      email: unmasked ? revealed.email : maskEmail(revealed.email),
+      phone: unmasked ? revealed.phone : maskPhone(revealed.phone),
+      firstName: revealed.firstName,
+      lastName: revealed.lastName,
       mergedIntoId: customer.mergedIntoId,
       masked: !unmasked,
       // Placeholder consents — the commerce Customer is not linked to the CRM
@@ -81,7 +103,7 @@ export class Customer360Service {
         },
       },
     };
-    await this.redis.cacheSet(key, payload, PROFILE_TTL_SECONDS);
+    if (!unmasked) await this.redis.cacheSet(key, payload, PROFILE_TTL_SECONDS);
     return payload;
   }
 
@@ -144,20 +166,27 @@ export class Customer360Service {
   // ----- Customer list (masked per role) ----------------------------------
   async list(organizationId: string, query: CustomerListQueryInput, unmasked: boolean): Promise<{ data: CustomerListItem[]; nextCursor: string | null }> {
     if (query.search) {
-      // Search narrows to a small set — filter customers, attach features, sort in JS.
-      const customers = await this.prisma.customer.findMany({
-        where: {
-          organizationId,
-          deletedAt: null,
-          mergedIntoId: null,
-          OR: [
-            { firstName: { contains: query.search, mode: 'insensitive' } },
-            { lastName: { contains: query.search, mode: 'insensitive' } },
-            { email: { contains: query.search, mode: 'insensitive' } },
-          ],
-        },
-        take: query.limit,
-      });
+      // name/email are encrypted at rest, so a DB `contains` can't match them.
+      // Email queries resolve via the deterministic emailHash (exact); name
+      // queries scan a bounded candidate set and filter on the decrypted name.
+      const term = query.search.trim();
+      let customers: CustomerRow[];
+      const emailHash = term.includes('@') ? this.pii.emailHashOf(term) : null;
+      if (emailHash) {
+        customers = await this.prisma.customer.findMany({
+          where: { organizationId, deletedAt: null, mergedIntoId: null, emailHash },
+          take: query.limit,
+        });
+      } else {
+        const candidates = await this.prisma.customer.findMany({
+          where: { organizationId, deletedAt: null, mergedIntoId: null },
+          take: SEARCH_SCAN_CAP,
+        });
+        const needle = term.toLowerCase();
+        customers = candidates
+          .filter((c) => (this.pii.revealName(c) ?? '').toLowerCase().includes(needle))
+          .slice(0, query.limit);
+      }
       const features = await this.featuresFor(organizationId, customers.map((c) => c.id));
       const data = customers
         .map((c) => this.toListItem(c, features.get(c.id), unmasked))
@@ -191,11 +220,12 @@ export class Customer360Service {
 
   // ----- helpers ----------------------------------------------------------
   private toListItem(c: CustomerRow, f: { netRevenueMinor: number; orderCount: number; lastOrderAt: Date | null; currency: string | null } | undefined, unmasked: boolean): CustomerListItem {
-    const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || c.externalId || c.id;
+    const { email } = this.pii.reveal(c);
+    const name = (this.pii.revealName(c) ?? '') || email || c.externalId || c.id;
     return {
       id: c.id,
       name,
-      email: unmasked ? c.email : maskEmail(c.email),
+      email: unmasked ? email : maskEmail(email),
       orderCount: f?.orderCount ?? 0,
       netRevenueMinor: f?.netRevenueMinor ?? 0,
       currency: f?.currency ?? null,

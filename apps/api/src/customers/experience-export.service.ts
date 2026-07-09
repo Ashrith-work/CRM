@@ -6,6 +6,7 @@ import { EXPERIENCE_EXPORT_TABS, type ExportStatusResponse } from '@crm/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AuditService } from '../audit/audit.service';
+import { CustomerPiiService } from './customer-pii.service';
 import { maskEmail } from '../common/pii.util';
 import { EXPORT_QUEUE, type ExportJob } from './export.constants';
 
@@ -24,6 +25,7 @@ export class ExperienceExportService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly audit: AuditService,
+    private readonly pii: CustomerPiiService,
     @InjectQueue(EXPORT_QUEUE) private readonly queue: Queue,
   ) {}
 
@@ -38,14 +40,20 @@ export class ExperienceExportService {
       orderBy: { placedAt: 'desc' },
     });
 
+    // Decrypt each customer once (authorized, server-side, for this export).
+    const revealBy = new Map(customers.map((c) => [c.id, { ...this.pii.reveal(c), externalId: c.externalId }]));
     const wb = new Workbook();
     wb.creator = 'CRM';
     const sheets = new Map(EXPERIENCE_EXPORT_TABS.map((t) => [t, wb.addWorksheet(t)]));
     const name = (id: string) => {
-      const c = customers.find((x) => x.id === id);
-      return c ? [c.firstName, c.lastName].filter(Boolean).join(' ') || c.email || c.externalId || id : id;
+      const r = revealBy.get(id);
+      if (!r) return id;
+      return [r.firstName, r.lastName].filter(Boolean).join(' ') || r.email || r.externalId || id;
     };
-    const email = (raw: string | null) => (masked ? maskEmail(raw) : raw);
+    const emailFor = (id: string) => {
+      const raw = revealBy.get(id)?.email ?? null;
+      return masked ? maskEmail(raw) : raw;
+    };
 
     // Summary
     const summary = sheets.get('Summary')!;
@@ -54,7 +62,7 @@ export class ExperienceExportService {
       const f = featBy.get(c.id);
       summary.addRow([
         name(c.id),
-        email(c.email),
+        emailFor(c.id),
         f?.orderCount ?? 0,
         major(f?.netRevenueMinor ?? 0),
         major(f?.avgOrderValueMinor ?? 0),

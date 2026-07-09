@@ -1,5 +1,8 @@
 import { AudienceService } from './audience.service';
 import { hashEmail } from '../common/hash.util';
+import { makePii } from '../common/crypto.testkit';
+
+const { pii } = makePii();
 
 /**
  * The ConsentGate is the security core of audience sync: a non-consented or
@@ -22,7 +25,7 @@ function build(opts: {
   const meta = { addUsers, createCustomAudience: createAudience };
   const connect = { connectionFor: jest.fn().mockResolvedValue({ adAccountId: 'act_1', businessId: null, accessToken: 't', apiVersion: 'v21.0' }) };
   const audit = { record: jest.fn().mockResolvedValue(undefined) };
-  const svc = new AudienceService(prisma as never, audit as never, gate as never, meta as never, connect as never);
+  const svc = new AudienceService(prisma as never, audit as never, gate as never, meta as never, connect as never, pii as never);
   return { svc, addUsers, createAudience, prisma, audit };
 }
 

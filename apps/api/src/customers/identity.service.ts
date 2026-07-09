@@ -3,8 +3,7 @@ import type { Customer as CustomerDto, MergeResult } from '@crm/types';
 import { Prisma, type Customer as CustomerRow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { normalizeE164 } from '../common/phone.util';
-import { normalizeEmail } from '../ingestion/shopify.mappers';
+import { CustomerPiiService } from './customer-pii.service';
 
 export interface CustomerIdentity {
   externalId?: string | null;
@@ -26,6 +25,7 @@ export class IdentityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly pii: CustomerPiiService,
   ) {}
 
   /**
@@ -38,13 +38,14 @@ export class IdentityService {
     actorUserId?: string | null,
   ): Promise<string> {
     const externalId = identity.externalId || null;
-    const email = normalizeEmail(identity.email);
-    const phone = normalizeE164(identity.phone ?? null);
+    // Match on the deterministic HASHES — never the encrypted originals.
+    const emailHash = this.pii.emailHashOf(identity.email);
+    const phoneHash = this.pii.phoneHashOf(identity.phone);
 
-    const candidates = await this.findCandidates(organizationId, { externalId, email, phone });
+    const candidates = await this.findCandidates(organizationId, { externalId, emailHash, phoneHash });
 
     if (candidates.length === 0) {
-      return this.createCustomer(organizationId, { externalId, email, phone, firstName: identity.firstName ?? null, lastName: identity.lastName ?? null });
+      return this.createCustomer(organizationId, identity);
     }
 
     // Earliest-created survivor; merge the rest into it.
@@ -52,7 +53,7 @@ export class IdentityService {
     for (const dup of duplicates) {
       await this.mergeCustomers(organizationId, survivor.id, dup.id, actorUserId, 'ingestion');
     }
-    await this.fillMissing(survivor, { externalId, email, phone, firstName: identity.firstName ?? null, lastName: identity.lastName ?? null });
+    await this.fillMissing(survivor, identity);
     return survivor.id;
   }
 
@@ -63,21 +64,26 @@ export class IdentityService {
     const merged = await this.requireCustomer(organizationId, mergedId);
     const reattributed = await this.mergeCustomers(organizationId, survivor.id, merged.id, actorUserId, 'manual');
     return {
-      survivor: serializeCustomer(await this.requireCustomer(organizationId, survivorId)),
-      merged: serializeCustomer(await this.requireCustomer(organizationId, mergedId)),
+      survivor: this.serialize(await this.requireCustomer(organizationId, survivorId)),
+      merged: this.serialize(await this.requireCustomer(organizationId, mergedId)),
       reattributed,
     };
+  }
+
+  /** Serialize a Customer row for an authorized human read — PII DECRYPTED. */
+  serialize(row: CustomerRow): CustomerDto {
+    return serializeCustomer({ ...row, ...this.pii.reveal(row) } as CustomerRow);
   }
 
   // ----- Internals --------------------------------------------------------
   private async findCandidates(
     organizationId: string,
-    keys: { externalId: string | null; email: string | null; phone: string | null },
+    keys: { externalId: string | null; emailHash: string | null; phoneHash: string | null },
   ): Promise<CustomerRow[]> {
     const or: Prisma.CustomerWhereInput[] = [];
     if (keys.externalId) or.push({ externalId: keys.externalId });
-    if (keys.email) or.push({ email: keys.email });
-    if (keys.phone) or.push({ phone: keys.phone });
+    if (keys.emailHash) or.push({ emailHash: keys.emailHash });
+    if (keys.phoneHash) or.push({ phoneHash: keys.phoneHash });
     if (or.length === 0) return [];
 
     const rows = await this.prisma.customer.findMany({
@@ -100,26 +106,30 @@ export class IdentityService {
     return current;
   }
 
-  private async createCustomer(organizationId: string, data: CustomerIdentity): Promise<string> {
+  private async createCustomer(organizationId: string, identity: CustomerIdentity): Promise<string> {
+    const p = this.pii.protect(identity); // encrypt PII + compute match-hashes + domain
     try {
       const created = await this.prisma.customer.create({
         data: {
           organizationId,
-          externalId: data.externalId ?? null,
-          email: data.email ?? null,
-          phone: data.phone ?? null,
-          firstName: data.firstName ?? null,
-          lastName: data.lastName ?? null,
+          externalId: identity.externalId ?? null,
+          email: p.email,
+          phone: p.phone,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          emailHash: p.emailHash,
+          phoneHash: p.phoneHash,
+          emailDomain: p.emailDomain,
         },
       });
       return created.id;
     } catch (err) {
-      // Race: a concurrent insert claimed the same email/externalId — re-resolve.
+      // Race: a concurrent insert claimed the same emailHash/externalId — re-resolve.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         const again = await this.findCandidates(organizationId, {
-          externalId: data.externalId ?? null,
-          email: data.email ?? null,
-          phone: data.phone ?? null,
+          externalId: identity.externalId ?? null,
+          emailHash: p.emailHash,
+          phoneHash: p.phoneHash,
         });
         if (again[0]) return again[0].id;
       }
@@ -127,13 +137,22 @@ export class IdentityService {
     }
   }
 
-  private async fillMissing(survivor: CustomerRow, data: CustomerIdentity): Promise<void> {
+  private async fillMissing(survivor: CustomerRow, identity: CustomerIdentity): Promise<void> {
+    const p = this.pii.protect(identity);
     const patch: Prisma.CustomerUpdateInput = {};
-    if (!survivor.externalId && data.externalId) patch.externalId = data.externalId;
-    if (!survivor.email && data.email) patch.email = data.email;
-    if (!survivor.phone && data.phone) patch.phone = data.phone;
-    if (!survivor.firstName && data.firstName) patch.firstName = data.firstName;
-    if (!survivor.lastName && data.lastName) patch.lastName = data.lastName;
+    if (!survivor.externalId && identity.externalId) patch.externalId = identity.externalId;
+    // "Missing" is judged by the HASH (the encrypted value is non-deterministic).
+    if (!survivor.emailHash && p.emailHash) {
+      patch.email = p.email;
+      patch.emailHash = p.emailHash;
+      patch.emailDomain = p.emailDomain;
+    }
+    if (!survivor.phoneHash && p.phoneHash) {
+      patch.phone = p.phone;
+      patch.phoneHash = p.phoneHash;
+    }
+    if (!survivor.firstName && p.firstName) patch.firstName = p.firstName;
+    if (!survivor.lastName && p.lastName) patch.lastName = p.lastName;
     if (Object.keys(patch).length === 0) return;
     try {
       await this.prisma.customer.update({ where: { id: survivor.id }, data: patch });
@@ -156,8 +175,8 @@ export class IdentityService {
       this.prisma.order.updateMany({ where: { organizationId, customerId: mergedId }, data: { customerId: survivorId } }),
       this.prisma.cart.updateMany({ where: { organizationId, customerId: mergedId }, data: { customerId: survivorId } }),
       this.prisma.commerceEvent.updateMany({ where: { organizationId, customerId: mergedId }, data: { customerId: survivorId } }),
-      // Point the merged row at the survivor and free its email for uniqueness.
-      this.prisma.customer.update({ where: { id: mergedId }, data: { mergedIntoId: survivorId, email: null } }),
+      // Point the merged row at the survivor and free its emailHash for uniqueness.
+      this.prisma.customer.update({ where: { id: mergedId }, data: { mergedIntoId: survivorId, email: null, emailHash: null, emailDomain: null } }),
     ]);
 
     await this.audit.record({
