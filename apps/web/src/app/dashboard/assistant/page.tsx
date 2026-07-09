@@ -93,7 +93,7 @@ export default function AssistantPage() {
 
       {turns.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-          Ask a question to get a grounded answer. Every metric shows the definition it used, and answers respect your role — you only ever see what you're allowed to.
+          Ask a question to get a grounded answer. Every metric shows the definition it used, and answers respect your role — you only ever see what you&apos;re allowed to.
         </p>
       ) : (
         <div className="space-y-4">
@@ -132,7 +132,7 @@ function Answer({ answer }: { answer: AssistantAnswer }) {
       <div className="flex flex-wrap items-center gap-2">
         {answer.declinedAction && (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
-            Read-only — can't act
+            Read-only — can&apos;t act
           </span>
         )}
         {answer.cached && (
