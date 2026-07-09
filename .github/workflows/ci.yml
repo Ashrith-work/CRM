@@ -88,5 +88,10 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # Dedicated gate: any PII-protection regression FAILS the build loudly.
+      # (These *.pii.spec.ts also run inside `pnpm test`; this names the gate.)
+      - name: PII protection tests
+        run: pnpm --filter @crm/api test:pii
+
       - name: API smoke tests (e2e)
         run: pnpm --filter @crm/api test:e2e
