@@ -62,7 +62,7 @@ export type Customer360 = z.infer<typeof Customer360Schema>;
 // ---------------------------------------------------------------------------
 // Unified timeline.
 // ---------------------------------------------------------------------------
-export const INTERACTION_TYPES = ['order', 'event', 'message', 'call', 'ticket', 'note', 'return'] as const;
+export const INTERACTION_TYPES = ['order', 'event', 'message', 'call', 'ticket', 'note', 'return', 'lead'] as const;
 export const InteractionTypeSchema = z.enum(INTERACTION_TYPES);
 export type InteractionType = z.infer<typeof InteractionTypeSchema>;
 

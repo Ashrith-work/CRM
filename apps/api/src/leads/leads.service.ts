@@ -22,6 +22,7 @@ import { TagsService } from '../tags/tags.service';
 import { CustomFieldsService } from '../custom-fields/custom-fields.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { CompaniesService } from '../companies/companies.service';
+import { IdentityService, serializeCustomer } from '../customers/identity.service';
 import { cursorArgs, resolveOrderBy, toPage } from '../common/list.util';
 
 const SORTABLE = ['firstName', 'lastName', 'status', 'createdAt', 'updatedAt'] as const;
@@ -35,6 +36,7 @@ export class LeadsService {
     private readonly customFields: CustomFieldsService,
     private readonly contacts: ContactsService,
     private readonly companies: CompaniesService,
+    private readonly identity: IdentityService,
   ) {}
 
   async list(
@@ -98,6 +100,7 @@ export class LeadsService {
         source: input.source,
         status: input.status ?? 'NEW',
         ownerId: input.ownerId ?? actorId,
+        firstTouchTouchpointId: input.firstTouchTouchpointId ?? null,
         customFields: customFields as Prisma.InputJsonValue,
       },
     });
@@ -190,8 +193,11 @@ export class LeadsService {
   }
 
   /**
-   * Convert a lead → contact (deduped by email), optionally creating/linking a
-   * company. Blocks if already converted. Core writes run in one transaction.
+   * Convert a lead → contact (deduped by email) AND → commerce Customer
+   * (find-or-create by email/phone via M1 identity resolution), optionally
+   * creating/linking a company. Sets convertedCustomerId, re-attributes the
+   * lead's first-touch touchpoint to the customer, and drops the lead onto the
+   * customer 360 timeline. Blocks if already converted.
    */
   async convert(
     organizationId: string,
@@ -264,6 +270,49 @@ export class LeadsService {
       return { contactId: contact.id, contactCreated };
     });
 
+    // Find-or-create the commerce Customer (deduped by email/phone via M1
+    // identity resolution, which also re-attributes any Order/Cart/Event to the
+    // survivor). Only when the lead carries an identifier — no anonymous rows.
+    let customerId: string | null = null;
+    let customerCreated = false;
+    if (lead.email || lead.phone) {
+      const before = await this.prisma.customer.findFirst({
+        where: {
+          organizationId,
+          deletedAt: null,
+          mergedIntoId: null,
+          OR: [
+            ...(lead.email ? [{ email: lead.email.toLowerCase() }] : []),
+            ...(lead.phone ? [{ phone: lead.phone }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      customerId = await this.identity.resolveCustomer(
+        organizationId,
+        { email: lead.email, phone: lead.phone, firstName: lead.firstName, lastName: lead.lastName },
+        actorId,
+      );
+      customerCreated = !before;
+      await this.prisma.lead.update({ where: { id }, data: { convertedCustomerId: customerId } });
+
+      // Re-attribute the lead's first touch to the customer (first-touch credit).
+      if (lead.firstTouchTouchpointId) {
+        await this.prisma.touchpoint.updateMany({
+          where: { id: lead.firstTouchTouchpointId, organizationId },
+          data: { customerId },
+        });
+      }
+
+      // Drop the lead onto the customer 360 timeline (idempotent on org+type+refId).
+      const summary = `Converted from lead: ${[lead.firstName, lead.lastName].filter(Boolean).join(' ')}`;
+      await this.prisma.interaction.upsert({
+        where: { organizationId_type_refId: { organizationId, type: 'LEAD', refId: id } },
+        update: { customerId, summary, occurredAt: new Date() },
+        create: { organizationId, customerId, type: 'LEAD', refId: id, summary, occurredAt: new Date() },
+      });
+    }
+
     // Emit domain events after commit.
     if (result.contactCreated) {
       await this.activity.emit({
@@ -282,15 +331,21 @@ export class LeadsService {
       entityId: id,
       eventType: 'CONVERTED',
       actorId,
-      metadata: { contactId: result.contactId, contactCreated: result.contactCreated, companyId, companyCreated },
+      metadata: { contactId: result.contactId, contactCreated: result.contactCreated, companyId, companyCreated, customerId, customerCreated },
       source,
     });
+
+    const customer = customerId
+      ? serializeCustomer(await this.prisma.customer.findUniqueOrThrow({ where: { id: customerId } }))
+      : null;
 
     return {
       lead: await this.get(organizationId, id),
       contact: await this.contacts.get(organizationId, result.contactId),
       company: companyId ? await this.companies.get(organizationId, companyId) : null,
       contactCreated: result.contactCreated,
+      customer,
+      customerCreated,
     };
   }
 
@@ -334,6 +389,8 @@ export function serializeLead(lead: LeadRow, tags: Tag[]): LeadDto {
     status: lead.status,
     ownerId: lead.ownerId,
     convertedContactId: lead.convertedContactId,
+    convertedCustomerId: lead.convertedCustomerId,
+    firstTouchTouchpointId: lead.firstTouchTouchpointId,
     customFields: (lead.customFields as CustomFieldValues) ?? {},
     tags,
     createdAt: lead.createdAt.toISOString(),

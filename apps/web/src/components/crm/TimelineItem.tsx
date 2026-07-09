@@ -11,6 +11,7 @@ const TYPE_META: Record<TimelineItemType['type'], { dot: string; icon: string }>
   ticket: { dot: 'bg-amber-500', icon: '🎫' },
   note: { dot: 'bg-slate-400', icon: '📝' },
   return: { dot: 'bg-red-500', icon: '↩️' },
+  lead: { dot: 'bg-indigo-500', icon: '🎯' },
 };
 
 /** One row of the unified customer timeline. */

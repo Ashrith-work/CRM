@@ -337,6 +337,7 @@ enum InteractionType {
   TICKET
   NOTE
   RETURN
+  LEAD
 }
 
 model Interaction {
@@ -712,6 +713,11 @@ model Lead {
   status             LeadStatus @default(NEW)
   ownerId            String?
   convertedContactId String?
+  /** P3.x — the commerce Customer this lead converted into (find-or-create by
+   * email/phone via M1 identity resolution). Soft scalar ref (no FK). */
+  convertedCustomerId String?
+  /** Source attribution — the first Touchpoint that brought this lead in. */
+  firstTouchTouchpointId String?
   customFields       Json       @default("{}")
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt

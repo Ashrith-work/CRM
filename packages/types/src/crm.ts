@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CustomerSchema } from './commerce';
 
 /**
  * Milestone 1 — CRM contracts. Single source of truth for both clients and the
@@ -315,6 +316,10 @@ export const LeadSchema = z.object({
   status: LeadStatusSchema,
   ownerId: z.string().nullable(),
   convertedContactId: z.string().nullable(),
+  /** Commerce Customer this lead converted into (find-or-create by email/phone). */
+  convertedCustomerId: z.string().nullable(),
+  /** The Touchpoint that first brought this lead in (source attribution). */
+  firstTouchTouchpointId: z.string().nullable(),
   customFields: CustomFieldValuesSchema,
   tags: z.array(TagSchema),
   createdAt: z.string(),
@@ -330,6 +335,8 @@ export const CreateLeadInput = z.object({
   source: z.string().max(120).optional(),
   status: LeadStatusSchema.optional(),
   ownerId: z.string().optional(),
+  /** Optional link to the Touchpoint that attributed this lead's source. */
+  firstTouchTouchpointId: z.string().optional(),
   customFields: CustomFieldValuesSchema.optional(),
   tagIds: z.array(z.string()).optional(),
 });
@@ -363,6 +370,9 @@ export const ConvertLeadResponseSchema = z.object({
   contact: ContactSchema,
   company: CompanySchema.nullable(),
   contactCreated: z.boolean(),
+  /** The commerce Customer the lead resolved to (null if no email/phone). */
+  customer: CustomerSchema.nullable(),
+  customerCreated: z.boolean(),
 });
 export type ConvertLeadResponse = z.infer<typeof ConvertLeadResponseSchema>;
 

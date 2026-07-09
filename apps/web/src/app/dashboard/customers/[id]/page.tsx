@@ -22,7 +22,7 @@ const CONSENT_BADGE: Record<string, string> = {
   WITHDRAWN: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400',
   NOT_CAPTURED: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
-const TIMELINE_TYPES = ['order', 'event', 'message', 'call', 'ticket', 'note', 'return'];
+const TIMELINE_TYPES = ['order', 'event', 'message', 'call', 'ticket', 'note', 'return', 'lead'];
 
 export default function Customer360Page() {
   const { getToken } = useAuth();
