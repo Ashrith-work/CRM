@@ -106,6 +106,10 @@ model Organization {
   loyaltyTransactions LoyaltyTransaction[]
   incentives          Incentive[]
 
+  // Recovery-lead assignment (human follow-up on prospects).
+  progressUpdates           ProgressUpdate[]
+  customerAssignmentHistory CustomerAssignmentHistory[]
+
   @@index([slug])
 }
 
@@ -188,16 +192,74 @@ model Customer {
   emailDomain    String?
   /** Non-null when this row was merged INTO another (survivor). */
   mergedIntoId   String?
+  // Recovery-lead assignment (human follow-up on cart-abandoners / identified
+  // non-buyers). All three are null for a normal customer; set only when a
+  // PROSPECT is tracked/assigned. ownerUserId is a soft scalar ref to User.id.
+  ownerUserId    String?
+  recoveryStatus RecoveryStatus?
+  /** Set when an assigned prospect placed a qualifying order (conversion credit). */
+  recoveryConvertedAt DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   deletedAt      DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization      Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  progressUpdates   ProgressUpdate[]
+  assignmentHistory CustomerAssignmentHistory[]
 
   @@unique([organizationId, externalId])
   @@unique([organizationId, emailHash])
   @@index([organizationId, phoneHash])
   @@index([organizationId, mergedIntoId])
+  @@index([organizationId, ownerUserId])
+  @@index([organizationId, recoveryStatus])
+}
+
+/** Human follow-up status for a recovery prospect. */
+enum RecoveryStatus {
+  to_contact
+  contacted
+  interested
+  no_response
+  converted
+  lost
+}
+
+/** One human follow-up note on a recovery prospect (owner logs status + note). */
+model ProgressUpdate {
+  id             String         @id @default(cuid())
+  organizationId String
+  customerId     String
+  /** Soft scalar ref to User.id — who logged this update. */
+  authorUserId   String
+  status         RecoveryStatus
+  /** Free text; PII-scrubbed before any AI use. */
+  note           String?
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, customerId, createdAt])
+  @@index([organizationId, authorUserId, createdAt])
+}
+
+/** Audit trail of prospect ownership changes (assign / reassign / unassign). */
+model CustomerAssignmentHistory {
+  id             String   @id @default(cuid())
+  organizationId String
+  customerId     String
+  /** Soft scalar refs to User.id. from/to null = unassigned side. */
+  fromUserId     String?
+  toUserId       String?
+  actorUserId    String
+  reason         String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, customerId, createdAt])
 }
 
 model Product {
