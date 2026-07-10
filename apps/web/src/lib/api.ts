@@ -205,6 +205,24 @@ import {
   type RecoveryStats,
   type EnrollmentListResponse,
 } from '@crm/types';
+import {
+  ProspectListResponseSchema,
+  ProgressUpdateSchema,
+  ProgressListResponseSchema,
+  CoordinationResponseSchema,
+  RecoveryMetricsResponseSchema,
+  AssignResultSchema,
+  type ProspectListResponse,
+  type ProgressUpdateDto,
+  type ProgressListResponse,
+  type CoordinationResponse,
+  type RecoveryMetricsResponse,
+  type AssignResult,
+  type ProspectSegment,
+  type AssignProspectInput,
+  type LogProgressInput,
+  type RecoveryStatus,
+} from '@crm/types';
 import { z, type ZodType } from 'zod';
 
 const StageArrayResponseSchema = z.object({ data: z.array(StageSchema) });
@@ -903,4 +921,27 @@ export function getCampaignEnrollments(
 }
 export function runCampaigns(getToken: TokenGetter): Promise<{ enrolled: number; sent: number }> {
   return request(getToken, `${API_ROUTES.campaigns}/run`, z.object({ enrolled: z.number(), sent: z.number() }), { method: 'POST' });
+}
+
+// --- Recovery-lead assignment -----------------------------------------------
+export function listProspects(getToken: TokenGetter, segment: ProspectSegment): Promise<ProspectListResponse> {
+  return request(getToken, `${API_ROUTES.recovery}/prospects?segment=${segment}`, ProspectListResponseSchema);
+}
+export function assignProspects(getToken: TokenGetter, body: AssignProspectInput): Promise<AssignResult> {
+  return request(getToken, `${API_ROUTES.recovery}/assign`, AssignResultSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function logRecoveryProgress(getToken: TokenGetter, body: LogProgressInput): Promise<ProgressUpdateDto> {
+  return request(getToken, `${API_ROUTES.recovery}/progress`, ProgressUpdateSchema, { method: 'POST', body: JSON.stringify(body) });
+}
+export function getRecoveryProgress(getToken: TokenGetter, customerId: string): Promise<ProgressListResponse> {
+  return request(getToken, `${API_ROUTES.recovery}/progress?customerId=${encodeURIComponent(customerId)}`, ProgressListResponseSchema);
+}
+export function getRecoveryCoordination(
+  getToken: TokenGetter,
+  params: { ownerUserId?: string; status?: RecoveryStatus } = {},
+): Promise<CoordinationResponse> {
+  return request(getToken, `${API_ROUTES.recovery}/coordination${qs(params)}`, CoordinationResponseSchema);
+}
+export function getRecoveryMetrics(getToken: TokenGetter): Promise<RecoveryMetricsResponse> {
+  return request(getToken, `${API_ROUTES.recovery}/metrics`, RecoveryMetricsResponseSchema);
 }
