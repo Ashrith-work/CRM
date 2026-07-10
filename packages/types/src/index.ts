@@ -17,6 +17,7 @@ export * from './assistant';
 export * from './ads';
 export * from './loyalty';
 export * from './incentives';
+export * from './recovery';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';
@@ -70,5 +71,7 @@ export const API_ROUTES = {
   // Loyalty ledger + incentives.
   loyalty: `/${API_PREFIX}/loyalty`,
   incentives: `/${API_PREFIX}/incentives`,
+  // Recovery-lead assignment (human follow-up on cart-abandoners / non-buyers).
+  recovery: `/${API_PREFIX}/recovery`,
   // P2.1 deep analytics (revenue/cohorts/clv/churn/margin) share /analytics.
 } as const;

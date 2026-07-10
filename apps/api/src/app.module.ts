@@ -36,6 +36,7 @@ import { AssistantModule } from './assistant/assistant.module';
 import { AdsModule } from './ads/ads.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { IncentivesModule } from './incentives/incentives.module';
+import { RecoveryModule } from './recovery/recovery.module';
 import { ClerkAuthGuard } from './auth/clerk-auth.guard';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
@@ -96,6 +97,7 @@ import { AuditInterceptor } from './audit/audit.interceptor';
     // Loyalty ledger + threshold incentive engine.
     LoyaltyModule,
     IncentivesModule,
+    RecoveryModule,
   ],
   providers: [
     // Order matters: authenticate first, then authorize.
