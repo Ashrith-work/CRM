@@ -185,6 +185,18 @@ const envSchema = z.object({
   INCENTIVE_MARGIN_FLOOR_PCT: z.coerce.number().min(0).max(100).default(20),
   /** Expiry sweep cadence (ms). Default 1h. */
   INCENTIVE_SWEEP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(60 * 60 * 1000),
+}).superRefine((env, ctx) => {
+  // Encryption in transit: a production DB connection MUST enforce TLS. Neon (and
+  // Railway) require `sslmode=require`; reject a non-TLS production DATABASE_URL so
+  // a misconfigured deploy fails fast instead of talking to the DB in the clear.
+  // Local dev (NODE_ENV!=production, localhost) is exempt.
+  if (env.NODE_ENV === 'production' && !/[?&](sslmode=require|ssl=true)/.test(env.DATABASE_URL)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['DATABASE_URL'],
+      message: 'Production DATABASE_URL must enforce TLS (add sslmode=require)',
+    });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

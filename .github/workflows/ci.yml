@@ -59,6 +59,11 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # Fail fast if a real secret was committed (credential leaks are the most
+      # common real leak). Dependency-free; runs before install.
+      - name: Secret scan
+        run: node scripts/secret-scan.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
