@@ -1,8 +1,9 @@
 import { parseNextPageInfo, ShopifyService, type ShopifyConn } from './shopify.service';
+import type { ShopifyTokenService } from './shopify-token.service';
 import type { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
 
-const conn: ShopifyConn = { shopDomain: 'nerige.myshopify.com', accessToken: 'tok', apiVersion: '2024-10' };
+const conn: ShopifyConn = { shopDomain: 'nerige.myshopify.com', apiVersion: '2024-10' };
 
 function res(status: number, opts: { items?: unknown[]; link?: string | null; retryAfter?: string } = {}) {
   return {
@@ -16,8 +17,9 @@ function res(status: number, opts: { items?: unknown[]; link?: string | null; re
   } as unknown as Response;
 }
 
-function service(): ShopifyService {
-  return new ShopifyService({ get: jest.fn() } as unknown as ConfigService<Env, true>);
+function service(token?: Partial<ShopifyTokenService>): ShopifyService {
+  const tok = { getToken: jest.fn().mockResolvedValue('tok'), ...token } as unknown as ShopifyTokenService;
+  return new ShopifyService({ get: jest.fn() } as unknown as ConfigService<Env, true>, tok);
 }
 
 describe('parseNextPageInfo', () => {
@@ -68,4 +70,29 @@ describe('ShopifyService.paginate', () => {
     expect(seen).toEqual([{ id: 1 }]);
     expect((global.fetch as jest.Mock)).toHaveBeenCalledTimes(2); // retried after backoff
   }, 15_000);
+
+  it('reactively refreshes the token on 401 and retries the request once', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(res(401)) // stale token → refresh + retry
+      .mockResolvedValueOnce(res(200, { items: [{ id: 1 }], link: null }));
+    const getToken = jest
+      .fn()
+      .mockResolvedValueOnce('stale-token') // initial
+      .mockResolvedValueOnce('fresh-token'); // forceRefresh
+
+    const seen: unknown[] = [];
+    const total = await service({ getToken } as never).paginate(conn, 'orders', {}, async (items) => {
+      seen.push(...items);
+    });
+
+    expect(total).toBe(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    // Exactly one refresh, and it was a forced one.
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(getToken).toHaveBeenNthCalledWith(2, conn.shopDomain, { forceRefresh: true });
+    // The retry used the fresh token in the header.
+    const secondHeaders = (global.fetch as jest.Mock).mock.calls[1][1].headers;
+    expect(secondHeaders['X-Shopify-Access-Token']).toBe('fresh-token');
+  });
 });

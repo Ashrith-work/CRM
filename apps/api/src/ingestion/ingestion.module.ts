@@ -4,6 +4,7 @@ import { CustomersModule } from '../customers/customers.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { IncentivesModule } from '../incentives/incentives.module';
 import { ShopifyService } from './shopify.service';
+import { ShopifyTokenService } from './shopify-token.service';
 import { CommerceIngestService } from './commerce-ingest.service';
 import { MarketingConsentWriter } from './marketing-consent.writer';
 import { IngestionService } from './ingestion.service';
@@ -20,7 +21,7 @@ import { SHOPIFY_SYNC_QUEUE } from './commerce.constants';
 @Module({
   imports: [CustomersModule, LoyaltyModule, IncentivesModule, BullModule.registerQueue({ name: SHOPIFY_SYNC_QUEUE })],
   controllers: [IngestionController, ShopifyWebhookController],
-  providers: [ShopifyService, CommerceIngestService, IngestionService, SyncProcessor, MarketingConsentWriter],
+  providers: [ShopifyService, ShopifyTokenService, CommerceIngestService, IngestionService, SyncProcessor, MarketingConsentWriter],
   exports: [IngestionService],
 })
 export class IngestionModule {}

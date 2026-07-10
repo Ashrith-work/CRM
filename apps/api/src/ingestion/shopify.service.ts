@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
+import { ShopifyTokenService } from './shopify-token.service';
 
 /** Pinned Shopify Admin API version — bump deliberately, never float. */
 export const SHOPIFY_API_VERSION_DEFAULT = '2024-10';
@@ -9,8 +10,13 @@ const MAX_RETRIES = 6;
 
 export interface ShopifyConn {
   shopDomain: string;
-  accessToken: string;
   apiVersion: string;
+  /**
+   * @deprecated No longer used. The access token is fetched on demand per request
+   * by ShopifyTokenService (client-credentials grant), not carried on the conn.
+   * Kept optional only for backward compatibility with existing callers/tests.
+   */
+  accessToken?: string;
 }
 
 /**
@@ -24,18 +30,27 @@ export interface ShopifyConn {
 export class ShopifyService {
   private readonly logger = new Logger(ShopifyService.name);
 
-  constructor(private readonly config: ConfigService<Env, true>) {}
+  constructor(
+    private readonly config: ConfigService<Env, true>,
+    private readonly token: ShopifyTokenService,
+  ) {}
 
   apiVersion(): string {
     return this.config.get('SHOPIFY_API_VERSION', { infer: true }) || SHOPIFY_API_VERSION_DEFAULT;
   }
 
-  /** Resolve the connection from an explicit shopDomain (Integration) + env token. */
+  /**
+   * Resolve the connection from an explicit shopDomain (Integration) or env. The
+   * app is "connectable" when it has a shop domain + client id/secret; the access
+   * token itself is fetched on demand by ShopifyTokenService (client-credentials),
+   * so no static admin token is required.
+   */
   connection(shopDomain?: string | null): ShopifyConn | null {
     const domain = shopDomain || this.config.get('SHOPIFY_SHOP_DOMAIN', { infer: true });
-    const accessToken = this.config.get('SHOPIFY_ADMIN_ACCESS_TOKEN', { infer: true });
-    if (!domain || !accessToken) return null;
-    return { shopDomain: domain, accessToken, apiVersion: this.apiVersion() };
+    const clientId = this.config.get('SHOPIFY_API_KEY', { infer: true });
+    const clientSecret = this.config.get('SHOPIFY_API_SECRET', { infer: true });
+    if (!domain || !clientId || !clientSecret) return null;
+    return { shopDomain: domain, apiVersion: this.apiVersion() };
   }
 
   /** Cheap credential check — returns the shop or throws a readable reason. */
@@ -85,8 +100,20 @@ export class ShopifyService {
     path: string,
   ): Promise<{ json: unknown; nextPageInfo: string | null }> {
     const url = `https://${conn.shopDomain}/admin/api/${conn.apiVersion}/${path}`;
+    // Fetch a valid token once up front (cached + auto-refreshed by the service).
+    let token = await this.token.getToken(conn.shopDomain);
+    let refreshedOn401 = false;
+
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(url, { headers: { 'X-Shopify-Access-Token': conn.accessToken, 'Content-Type': 'application/json' } });
+      const res = await fetch(url, { headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' } });
+
+      // Reactive refresh: a 401 means the token is stale/revoked — fetch a fresh
+      // one exactly ONCE and retry the same request a single time.
+      if (res.status === 401 && !refreshedOn401) {
+        refreshedOn401 = true;
+        token = await this.token.getToken(conn.shopDomain, { forceRefresh: true });
+        continue;
+      }
 
       if (res.status === 429 || res.status >= 500) {
         if (attempt === MAX_RETRIES) throw new Error(`Shopify ${res.status} after ${MAX_RETRIES} retries`);
