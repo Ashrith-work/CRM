@@ -5,7 +5,7 @@ import type { Env } from '../config/env';
 
 const conn: ShopifyConn = { shopDomain: 'nerige.myshopify.com', apiVersion: '2024-10' };
 
-function res(status: number, opts: { items?: unknown[]; link?: string | null; retryAfter?: string } = {}) {
+function res(status: number, opts: { items?: unknown[]; link?: string | null; retryAfter?: string; body?: string } = {}) {
   return {
     status,
     ok: status < 400,
@@ -13,7 +13,7 @@ function res(status: number, opts: { items?: unknown[]; link?: string | null; re
       get: (k: string) => (k === 'link' ? opts.link ?? null : k === 'retry-after' ? opts.retryAfter ?? null : null),
     },
     json: async () => (opts.items ? { orders: opts.items } : {}),
-    text: async () => '',
+    text: async () => opts.body ?? '',
   } as unknown as Response;
 }
 
@@ -70,6 +70,28 @@ describe('ShopifyService.paginate', () => {
     expect(seen).toEqual([{ id: 1 }]);
     expect((global.fetch as jest.Mock)).toHaveBeenCalledTimes(2); // retried after backoff
   }, 15_000);
+
+  it('retries a transient 403 "Unavailable Shop" and resumes', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(res(403, { body: '{"errors":"Unavailable Shop"}' })) // transient → back off + retry
+      .mockResolvedValueOnce(res(200, { items: [{ id: 1 }], link: null }));
+
+    const seen: unknown[] = [];
+    const total = await service().paginate(conn, 'orders', {}, async (items) => {
+      seen.push(...items);
+    });
+
+    expect(total).toBe(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it('does NOT retry a permanent 403 (e.g. missing scope) — throws immediately', async () => {
+    global.fetch = jest.fn().mockResolvedValue(res(403, { body: '{"errors":"requires merchant approval for write_price_rules scope"}' }));
+
+    await expect(service().paginate(conn, 'orders', {}, async () => {})).rejects.toThrow(/403/);
+    expect(global.fetch).toHaveBeenCalledTimes(1); // no retry on a permanent error
+  });
 
   it('reactively refreshes the token on 401 and retries the request once', async () => {
     global.fetch = jest

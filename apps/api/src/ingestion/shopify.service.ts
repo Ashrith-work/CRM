@@ -125,7 +125,20 @@ export class ShopifyService {
         await sleep(backoff);
         continue;
       }
-      if (!res.ok) throw new Error(`Shopify ${res.status}: ${await res.text().catch(() => '')}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        // Shopify intermittently returns a TRANSIENT "Unavailable Shop" (403/404)
+        // during maintenance/scaling — retry it with backoff instead of failing
+        // the whole backfill. Permanent 4xx (bad auth, missing scope) still throw.
+        const transientShop = (res.status === 403 || res.status === 404) && /unavailable shop/i.test(body);
+        if (transientShop && attempt < MAX_RETRIES) {
+          const backoff = Math.min(30_000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250);
+          this.logger.warn(`Shopify ${res.status} "Unavailable Shop" — backing off ${backoff}ms (attempt ${attempt + 1})`);
+          await sleep(backoff);
+          continue;
+        }
+        throw new Error(`Shopify ${res.status}: ${body}`);
+      }
 
       return { json: await res.json(), nextPageInfo: parseNextPageInfo(res.headers.get('link')) };
     }
