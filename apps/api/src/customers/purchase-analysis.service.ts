@@ -7,36 +7,46 @@ import type {
 } from '@crm/types';
 import { Prisma, type Customer as CustomerRow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { AuditService } from '../audit/audit.service';
 import { CustomerPiiService } from './customer-pii.service';
 import { maskEmail, maskPhone } from '../common/pii.util';
 import { assembleOrderRow, type LineItemForRow, type ProductMeta } from './purchase-analysis.math';
 
-// Name/phone search can't push down to SQL over encrypted columns — scan a bounded
-// candidate set and filter on the decrypted value (same cap as the customer list).
-const SEARCH_SCAN_CAP = 1000;
+/** Name search shortest useful query (trigram indexes want ≥ this). */
+const MIN_QUERY_LEN = 2;
+/** Cap of index-matched name rows we rank before returning. */
+const NAME_MATCH_CAP = 60;
 const PAID = ['PAID', 'FULFILLED'] as const;
+const SUGGEST_TTL = 30; // s — typeahead payload
+const PROFILE_TTL = 60; // s — masked profile (unmasked is never cached; it audits)
 
 /**
  * Purchase Analysis Dashboard reads: look up a customer by phone / email / name
  * (typeahead), and assemble their last + 2nd-last order profile. Reuses the
  * encrypted-PII + match-hash patterns; all PII masked unless the caller has
- * pii:read. Never recomputes RFM — reads CustomerFeatures.
+ * pii:read. Name search uses the pg_trgm-indexed `nameSearch` column (one query,
+ * no decrypt-scan). Payloads are Redis-cached (short TTL). Never recomputes RFM.
  */
 @Injectable()
 export class PurchaseAnalysisService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
     private readonly pii: CustomerPiiService,
     private readonly audit: AuditService,
   ) {}
 
   // ----- Typeahead --------------------------------------------------------
-  /** Suggestions as the user types: email → hash exact; phone → hash exact; else
-   *  a bounded decrypt-scan on the name. RBAC-scoped + PII-masked. */
+  /** Suggestions as the user types: email/phone → hash exact; name → indexed
+   *  `nameSearch ILIKE`. RBAC-scoped + PII-masked. Cached (short TTL). */
   async suggest(organizationId: string, q: string, unmasked: boolean, limit: number): Promise<CustomerSuggestion[]> {
     const term = q.trim();
-    if (!term) return [];
+    if (term.length < MIN_QUERY_LEN) return [];
+
+    const cacheKey = `pa:suggest:${organizationId}:${unmasked ? 'u' : 'm'}:${limit}:${term.toLowerCase()}`;
+    const cached = await this.redis.cacheGet<CustomerSuggestion[]>(cacheKey);
+    if (cached) return cached;
 
     let rows: CustomerRow[];
     const emailHash = term.includes('@') ? this.pii.emailHashOf(term) : null;
@@ -46,9 +56,14 @@ export class PurchaseAnalysisService {
     } else if (phoneHash) {
       rows = await this.prisma.customer.findMany({ where: this.baseWhere(organizationId, { phoneHash }), take: limit });
     } else {
-      rows = (await this.nameMatches(organizationId, term)).slice(0, limit);
+      rows = await this.nameMatchRows(organizationId, term, NAME_MATCH_CAP);
     }
-    return this.toSuggestions(organizationId, rows, unmasked);
+    // Rank by order count (buyers first) among the matches, then cap.
+    const suggestions = (await this.toSuggestions(organizationId, rows, unmasked))
+      .sort((a, b) => b.orderCount - a.orderCount)
+      .slice(0, limit);
+    await this.redis.cacheSet(cacheKey, suggestions, SUGGEST_TTL);
+    return suggestions;
   }
 
   // ----- Lookup (resolve to one customer or a disambiguation list) ---------
@@ -68,9 +83,10 @@ export class PurchaseAnalysisService {
         return { matchedBy: 'phone', match: suggestions[0] ?? null, candidates: suggestions.length > 1 ? suggestions : [] };
       }
     }
-    // Name: decrypt-scan → exact-one resolves, several disambiguate, none = no match.
-    const matches = (await this.nameMatches(organizationId, term)).slice(0, 25);
-    const suggestions = await this.toSuggestions(organizationId, matches, unmasked);
+    if (term.length < MIN_QUERY_LEN) return { matchedBy: 'none', match: null, candidates: [] };
+    // Name: indexed match → exact-one resolves, several disambiguate, none = no match.
+    const rows = await this.nameMatchRows(organizationId, term, 25);
+    const suggestions = (await this.toSuggestions(organizationId, rows, unmasked)).sort((a, b) => b.orderCount - a.orderCount);
     if (suggestions.length === 1) return { matchedBy: 'name', match: suggestions[0], candidates: [] };
     if (suggestions.length > 1) return { matchedBy: 'name', match: null, candidates: suggestions };
     return { matchedBy: 'none', match: null, candidates: [] };
@@ -78,19 +94,33 @@ export class PurchaseAnalysisService {
 
   // ----- Purchase profile (last + 2nd-last order) -------------------------
   async profile(organizationId: string, id: string, unmasked: boolean, actorUserId?: string): Promise<PurchaseProfile> {
+    // Only the masked payload is cached; the unmasked read is rebuilt each time so
+    // raw PII never rests in Redis and every access audits (matches Customer 360).
+    const cacheKey = `pa:profile:${organizationId}:${id}:m`;
+    if (!unmasked) {
+      const cached = await this.redis.cacheGet<PurchaseProfile>(cacheKey);
+      if (cached) return cached;
+    }
+
     const customer = await this.resolveSurvivor(organizationId, id);
-    const features = await this.prisma.customerFeatures.findUnique({
-      where: { organizationId_customerId: { organizationId, customerId: customer.id } },
-    });
 
-    const orders = await this.prisma.order.findMany({
-      where: { organizationId, customerId: customer.id, deletedAt: null, status: { in: [...PAID] } },
-      include: { items: { select: { title: true, variant: true, quantity: true, priceMinor: true, productId: true } } },
-      orderBy: { placedAt: 'desc' },
-      take: 2, // last + 2nd-last
-    });
+    // features + orders are independent → fetch in parallel (fewer round trips).
+    const [features, orders] = await Promise.all([
+      this.prisma.customerFeatures.findUnique({
+        where: { organizationId_customerId: { organizationId, customerId: customer.id } },
+        select: { rSegment: true, orderCount: true, netRevenueMinor: true, currency: true, clvMinor: true, clvBand: true, lastOrderAt: true },
+      }),
+      this.prisma.order.findMany({
+        where: { organizationId, customerId: customer.id, deletedAt: null, status: { in: [...PAID] } },
+        select: {
+          id: true, orderNumber: true, placedAt: true, totalMinor: true, refundedMinor: true, currency: true, discountCode: true, discountMinor: true,
+          items: { select: { title: true, variant: true, quantity: true, priceMinor: true, productId: true } },
+        },
+        orderBy: { placedAt: 'desc' },
+        take: 2, // last + 2nd-last only
+      }),
+    ]);
 
-    // Product metadata (type + tags) for the fabric/product-type fields.
     const productIds = [...new Set(orders.flatMap((o) => o.items.map((i) => i.productId).filter((v): v is string => !!v)))];
     const products = productIds.length
       ? await this.prisma.product.findMany({ where: { organizationId, id: { in: productIds } }, select: { id: true, productType: true, tags: true } })
@@ -98,9 +128,7 @@ export class PurchaseAnalysisService {
     const meta = new Map<string, ProductMeta>(products.map((p) => [p.id, { productType: p.productType, tags: p.tags }]));
 
     const segment = features?.rSegment ?? null;
-    const rows: PurchaseOrderRow[] = orders.map((o) =>
-      assembleOrderRow(o, o.items as LineItemForRow[], meta, segment),
-    );
+    const rows: PurchaseOrderRow[] = orders.map((o) => assembleOrderRow(o, o.items as LineItemForRow[], meta, segment));
 
     const revealed = this.pii.reveal(customer);
     if (unmasked) {
@@ -115,7 +143,7 @@ export class PurchaseAnalysisService {
     }
     const name = (this.pii.revealName(customer) ?? '') || (unmasked ? revealed.email : maskEmail(revealed.email)) || customer.externalId || customer.id;
 
-    return {
+    const payload: PurchaseProfile = {
       customer: {
         id: customer.id,
         name,
@@ -133,6 +161,8 @@ export class PurchaseAnalysisService {
       },
       orders: rows,
     };
+    if (!unmasked) await this.redis.cacheSet(cacheKey, payload, PROFILE_TTL);
+    return payload;
   }
 
   // ----- helpers ----------------------------------------------------------
@@ -141,29 +171,15 @@ export class PurchaseAnalysisService {
   }
 
   /**
-   * Name matches over encrypted names: encrypted columns can't be SQL-searched, so
-   * we scan a bounded candidate set and filter on the decrypted name. We prioritise
-   * the customers most likely to be looked up — BUYERS, highest-value first (the
-   * indexed CustomerFeatures.netRevenueMinor) — so Champions/active customers fall
-   * inside the window. Customers with no orders (no features) aren't relevant here.
-   * NOTE: still a bounded scan; a match beyond the cap can be missed — use email or
-   * phone (exact hash match) for a guaranteed resolve.
+   * Index-backed name match: `nameSearch ILIKE '%q%'` over the pg_trgm GIN index —
+   * one query, no decrypt-scan. `nameSearch` is normalized lowercase, so we lower
+   * the needle and use a case-sensitive `contains` (still hits the trigram index).
    */
-  private async nameMatches(organizationId: string, term: string): Promise<CustomerRow[]> {
-    const feats = await this.prisma.customerFeatures.findMany({
-      where: { organizationId },
-      orderBy: { netRevenueMinor: 'desc' },
-      take: SEARCH_SCAN_CAP,
-      select: { customerId: true },
+  private async nameMatchRows(organizationId: string, term: string, cap: number): Promise<CustomerRow[]> {
+    return this.prisma.customer.findMany({
+      where: this.baseWhere(organizationId, { nameSearch: { contains: term.toLowerCase() } }),
+      take: cap,
     });
-    const customers = await this.prisma.customer.findMany({
-      where: this.baseWhere(organizationId, { id: { in: feats.map((f) => f.customerId) } }),
-    });
-    // Preserve the value-desc order from features.
-    const rank = new Map(feats.map((f, i) => [f.customerId, i]));
-    customers.sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9));
-    const needle = term.toLowerCase();
-    return customers.filter((c) => (this.pii.revealName(c) ?? '').toLowerCase().includes(needle));
   }
 
   private async toSuggestions(organizationId: string, rows: CustomerRow[], unmasked: boolean): Promise<CustomerSuggestion[]> {
@@ -176,8 +192,8 @@ export class PurchaseAnalysisService {
     return rows.map((c) => {
       const { email } = this.pii.reveal(c);
       const maskedEmail = unmasked ? email : maskEmail(email);
-      // Name is shown for identification (as in the customer list); email masked
-      // per role. Never let an unmasked email leak through the name fallback.
+      // Name shown for identification (as in the customer list); email masked per
+      // role. Never let an unmasked email leak through the name fallback.
       const name = (this.pii.revealName(c) ?? '') || maskedEmail || c.externalId || c.id;
       return { id: c.id, name, email: maskedEmail, externalId: c.externalId, orderCount: orderCountById.get(c.id) ?? 0 };
     });

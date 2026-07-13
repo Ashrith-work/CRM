@@ -768,8 +768,8 @@ export function listCustomers(getToken: TokenGetter, params: CustomerListParams 
 }
 
 // ----- Purchase Analysis Dashboard --------------------------------------------
-export function suggestCustomers(getToken: TokenGetter, q: string, limit = 8): Promise<SuggestResponse> {
-  return request(getToken, `${API_ROUTES.customers}/suggest${qs({ q, limit })}`, SuggestResponseSchema);
+export function suggestCustomers(getToken: TokenGetter, q: string, limit = 8, signal?: AbortSignal): Promise<SuggestResponse> {
+  return request(getToken, `${API_ROUTES.customers}/suggest${qs({ q, limit })}`, SuggestResponseSchema, signal ? { signal } : undefined);
 }
 export function lookupCustomer(getToken: TokenGetter, q: string): Promise<LookupResponse> {
   return request(getToken, `${API_ROUTES.customers}/lookup${qs({ q })}`, LookupResponseSchema);

@@ -20,6 +20,7 @@ seed so the CRM shows only real Shopify data.
 | `verify.ts` | no | no | Asserts only-real invariants (PASS/FAIL) + revenue sanity. |
 | `backfill-product-type.ts` | DB only | Shopify reads only | Backfills `Product.productType` from Shopify `product_type` (for top-categories analytics). Batches each page into one transaction; retries on connection drops. |
 | `backfill-product-tags.ts` | DB only | Shopify reads only | Backfills `Product.tags` from Shopify product tags (for the Purchase Analysis "Fabrics" field). Same batched/retry pattern. |
+| `backfill-name-search.ts` | DB only | no | Backfills `Customer.nameSearch` (normalized plaintext name) for the pg_trgm-indexed name typeahead. Decrypts names in-app; batches per page. |
 
 ## Why these exist / notes
 

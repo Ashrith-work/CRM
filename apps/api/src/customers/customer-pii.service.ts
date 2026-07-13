@@ -96,6 +96,16 @@ export class CustomerPiiService {
   private hmac(value: string): string {
     return createHmac('sha256', this.pepper).update(value).digest('hex');
   }
+
+  /**
+   * Normalized SEARCHABLE name (lowercased, single-spaced) for the pg_trgm name
+   * index — NOT a hash and NOT ciphertext. Deliberate perf/PII tradeoff (see the
+   * Customer.nameSearch schema note). Returns null when there is no name.
+   */
+  nameSearchOf(firstName?: string | null, lastName?: string | null): string | null {
+    const name = [firstName, lastName].map((s) => (s ?? '').trim()).filter(Boolean).join(' ').toLowerCase().replace(/\s+/g, ' ');
+    return name || null;
+  }
 }
 
 /** The domain portion of an email (non-PII) — e.g. "jane@gmail.com" → "gmail.com". */

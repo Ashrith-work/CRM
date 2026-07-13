@@ -38,16 +38,25 @@ export default function PurchaseAnalysisPage() {
   const [message, setMessage] = useState('');
 
   const selectedRef = useRef(false); // suppress typeahead right after a selection
+  const cacheRef = useRef(new Map<string, CustomerSuggestion[]>()); // recent-query cache
 
-  // ----- Typeahead (debounced) ------------------------------------------------
+  // ----- Typeahead: debounced (300ms), min-length 2, cancels in-flight, cached --
   useEffect(() => {
     if (selectedRef.current) { selectedRef.current = false; return; }
     const q = query.trim();
-    if (q.length < 2) { setSuggestions([]); return; }
+    if (q.length < 2) { setSuggestions([]); return; } // min-length gate — no request
+    const key = q.toLowerCase();
+    const cached = cacheRef.current.get(key);
+    if (cached) { setSuggestions(cached); setShowSuggest(true); return; } // cache hit — no request
+
+    const controller = new AbortController();
     const handle = setTimeout(() => {
-      suggestCustomers(getToken, q).then((r) => { setSuggestions(r.data); setShowSuggest(true); }).catch(() => setSuggestions([]));
+      suggestCustomers(getToken, q, 8, controller.signal)
+        .then((r) => { cacheRef.current.set(key, r.data); setSuggestions(r.data); setShowSuggest(true); })
+        .catch(() => { if (!controller.signal.aborted) setSuggestions([]); }); // ignore superseded (aborted) requests
     }, 300);
-    return () => clearTimeout(handle);
+    // A new keystroke clears the pending timer AND cancels any in-flight request.
+    return () => { clearTimeout(handle); controller.abort(); };
   }, [query, getToken]);
 
   const loadCustomer = useCallback(async (id: string) => {

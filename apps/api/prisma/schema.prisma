@@ -193,6 +193,12 @@ model Customer {
   phoneHash      String?
   // Non-PII derived value for the AI-safe view (e.g. "gmail.com").
   emailDomain    String?
+  // SEARCHABLE name — normalized (lowercased) plaintext of the name, ONLY so
+  // name typeahead can use a pg_trgm GIN index (ciphertext can't be ILIKE-searched).
+  // A deliberate perf/PII tradeoff: names are plaintext at rest here (already
+  // display-exposed to commerce:read); email/phone stay encrypted + hash-only.
+  // The GIN trigram index is created in the migration (raw SQL).
+  nameSearch     String?
   /** Non-null when this row was merged INTO another (survivor). */
   mergedIntoId   String?
   // Recovery-lead assignment (human follow-up on cart-abandoners / identified

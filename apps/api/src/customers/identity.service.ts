@@ -120,6 +120,7 @@ export class IdentityService {
           emailHash: p.emailHash,
           phoneHash: p.phoneHash,
           emailDomain: p.emailDomain,
+          nameSearch: this.pii.nameSearchOf(identity.firstName, identity.lastName),
         },
       });
       return created.id;
@@ -153,6 +154,11 @@ export class IdentityService {
     }
     if (!survivor.firstName && p.firstName) patch.firstName = p.firstName;
     if (!survivor.lastName && p.lastName) patch.lastName = p.lastName;
+    // Keep the searchable name in sync when a name first lands on this survivor.
+    if (!survivor.nameSearch) {
+      const ns = this.pii.nameSearchOf(identity.firstName, identity.lastName);
+      if (ns) patch.nameSearch = ns;
+    }
     if (Object.keys(patch).length === 0) return;
     try {
       await this.prisma.customer.update({ where: { id: survivor.id }, data: patch });
