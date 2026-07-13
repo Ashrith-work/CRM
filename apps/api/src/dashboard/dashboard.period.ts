@@ -100,6 +100,26 @@ export function resolvePeriod(
   }
 }
 
+/**
+ * The immediately-preceding comparison window for `period`. Calendar-aware for
+ * presets (previous day/week/month/quarter, re-snapped to local edges); for a
+ * custom range it is the equal-duration window ending where `period` starts.
+ */
+export function previousPeriod(preset: PeriodPreset, period: Period, tz: string): Period {
+  switch (preset) {
+    case 'today':
+      return { start: addLocalDays(period.start, tz, -1), end: period.start };
+    case 'week':
+      return { start: addLocalDays(period.start, tz, -7), end: period.start };
+    case 'month':
+      return { start: addLocalMonths(period.start, tz, -1), end: period.start };
+    case 'quarter':
+      return { start: addLocalMonths(period.start, tz, -3), end: period.start };
+    case 'custom':
+      return { start: new Date(period.start.getTime() - (period.end.getTime() - period.start.getTime())), end: period.start };
+  }
+}
+
 /** Split `[start, end)` into week/month buckets stepping from `start`. */
 export function generateBuckets(period: Period, interval: 'week' | 'month', tz: string): Period[] {
   const buckets: Period[] = [];

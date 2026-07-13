@@ -185,6 +185,9 @@ import {
 } from '@crm/types';
 import {
   AnalyticsSummarySchema,
+  KpiResponseSchema,
+  type KpiResponse,
+  type KpiQueryInput,
   SegmentSchema,
   SegmentListResponseSchema,
   SegmentMembersResponseSchema,
@@ -821,6 +824,13 @@ export function getChurnWatchlist(getToken: TokenGetter): Promise<ChurnWatchlist
 }
 export function getMargin(getToken: TokenGetter): Promise<MarginResponse> {
   return request(getToken, `${API_ROUTES.analytics}/margin`, MarginResponseSchema);
+}
+/** Commerce KPI tiles (period-scoped, previous-period deltas) from the DB. */
+export function getKpis(
+  getToken: TokenGetter,
+  params: Partial<KpiQueryInput> = {},
+): Promise<KpiResponse> {
+  return request(getToken, `${API_ROUTES.analytics}/kpis${qs(params)}`, KpiResponseSchema);
 }
 
 // --- Read-only AI assistant (P2.2) ------------------------------------------

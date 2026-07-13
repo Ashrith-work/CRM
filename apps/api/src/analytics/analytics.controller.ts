@@ -1,18 +1,22 @@
-import { Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
 import {
+  KpiQueryInput,
   PERMISSIONS,
   type AnalyticsSummary,
   type ChurnWatchlistResponse,
   type ClvDistributionResponse,
   type CohortResponse,
+  type KpiResponse,
   type MarginResponse,
   type RevenueTrendResponse,
 } from '@crm/types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { UserContext } from '../auth/auth.types';
 import { RequirePermission } from '../rbac/require-permission.decorator';
+import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { canSeeUnmaskedPii } from '../common/pii.util';
 import { AnalyticsService } from './analytics.service';
+import { KpiService } from './kpi.service';
 import { RfmRefreshService } from './rfm-refresh.service';
 import { ChurnScoreService } from './churn-score.service';
 
@@ -20,9 +24,20 @@ import { ChurnScoreService } from './churn-score.service';
 export class AnalyticsController {
   constructor(
     private readonly analytics: AnalyticsService,
+    private readonly kpi: KpiService,
     private readonly rfm: RfmRefreshService,
     private readonly churn: ChurnScoreService,
   ) {}
+
+  /** Commerce KPI tiles from the ingested Shopify data (period-scoped, cached). */
+  @Get('kpis')
+  @RequirePermission(PERMISSIONS.ANALYTICS_READ)
+  async kpis(
+    @CurrentUser() ctx: UserContext,
+    @Query(new ZodValidationPipe(KpiQueryInput)) query: KpiQueryInput,
+  ): Promise<KpiResponse> {
+    return this.kpi.kpis(ctx.organization.id, query);
+  }
 
   /** RFM summary + segment distribution (reads the denormalized features). */
   @Get('summary')

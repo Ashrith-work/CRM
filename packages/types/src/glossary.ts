@@ -6,13 +6,16 @@
  * shape + resolver are introduced here.
  */
 
-export const GLOSSARY_VERSION = 3;
+export const GLOSSARY_VERSION = 4;
 
 /** Definition-sync date for the metrics wired to real data (M3). */
 const SYNCED = '2026-07-08';
 
 /** Definition-sync date for the Meta ads + attribution metrics (P2.3). */
 const SYNCED_ADS = '2026-07-09';
+
+/** Definition-sync date for the P2.1 dashboard commerce KPI tiles. */
+const SYNCED_KPI = '2026-07-13';
 
 export interface GlossaryEntry {
   metricKey: string;
@@ -169,6 +172,87 @@ export const GLOSSARY_REGISTRY: Record<string, GlossaryEntry> = {
     formula: 'band of CLV (or net revenue when CLV is unset) against VIP/Gold/Silver thresholds',
     dataWindow: 'lifetime (nightly refresh)',
     lastSynced: SYNCED_ADS,
+  },
+
+  // P2.1 — dashboard commerce KPI tiles. Computed FROM the ingested Shopify data
+  // (commerce_kpi_daily view + customer aggregates), period-scoped in the org
+  // timezone; only paid/fulfilled orders count and refunds subtract.
+  refund_rate: {
+    metricKey: 'refund_rate',
+    plainLanguage: 'Share of gross revenue that was refunded in the period. Lower is better.',
+    formula: 'Σ refundedMinor ÷ Σ totalMinor (gross) over paid/fulfilled orders',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  repeat_purchase_rate: {
+    metricKey: 'repeat_purchase_rate',
+    plainLanguage: 'Share of your buyers who have ordered more than once — the core retention signal.',
+    formula: 'customers with ≥2 paid/fulfilled orders ÷ customers with ≥1 (lifetime)',
+    dataWindow: 'lifetime (nightly refresh)',
+    lastSynced: SYNCED_KPI,
+  },
+  returning_rate: {
+    metricKey: 'returning_rate',
+    plainLanguage: 'Of the customers who ordered in the period, the share who had also ordered before it (vs brand-new buyers).',
+    formula: 'returning ÷ active, where returning = active customers whose first order predates the period',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  new_customers: {
+    metricKey: 'new_customers',
+    plainLanguage: "Customers whose first-ever order landed in the period.",
+    formula: 'count(distinct customers whose first paid/fulfilled order falls in the period)',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  active_customers: {
+    metricKey: 'active_customers',
+    plainLanguage: 'Distinct customers who placed at least one order in the period.',
+    formula: 'count(distinct customerId) over paid/fulfilled orders in the period',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  avg_orders_per_customer: {
+    metricKey: 'avg_orders_per_customer',
+    plainLanguage: 'Average number of orders per active customer in the period.',
+    formula: 'orders ÷ active customers (period)',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  discount_usage_rate: {
+    metricKey: 'discount_usage_rate',
+    plainLanguage: 'Share of orders that used a discount / coupon code.',
+    formula: 'orders with a discountCode ÷ orders (paid/fulfilled) in the period',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  discount_value: {
+    metricKey: 'discount_value',
+    plainLanguage: 'Total discount given across orders in the period. Lower is better for margin.',
+    formula: 'Σ discountMinor over paid/fulfilled orders in the period',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  total_customers: {
+    metricKey: 'total_customers',
+    plainLanguage: 'All customers on file (a standing total — not period-scoped).',
+    formula: 'count(customers, excluding merged & soft-deleted)',
+    dataWindow: 'all-time',
+    lastSynced: SYNCED_KPI,
+  },
+  top_products: {
+    metricKey: 'top_products',
+    plainLanguage: 'Products ranked by revenue in the period, from order line items (gross line revenue = unit price × quantity).',
+    formula: 'Σ(orderItem.priceMinor × quantity) grouped by product, top 8 in the period',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
+  },
+  top_categories: {
+    metricKey: 'top_categories',
+    plainLanguage: 'Product categories ranked by revenue in the period, using each product\'s Shopify product type. Items with no product type fall under "Uncategorized".',
+    formula: 'Σ(orderItem.priceMinor × quantity) grouped by Product.productType, top 8 in the period',
+    dataWindow: 'selected period (org timezone)',
+    lastSynced: SYNCED_KPI,
   },
 };
 

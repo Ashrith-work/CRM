@@ -54,15 +54,19 @@ export interface MappedProduct {
   externalId: string;
   title: string;
   imageUrl: string | null;
+  /** Shopify product_type — the category for top-categories analytics. */
+  productType: string | null;
 }
 
 export function mapProduct(raw: Raw): MappedProduct {
   const image = raw.image as Raw | undefined;
   const images = raw.images as Raw[] | undefined;
+  const productType = typeof raw.product_type === 'string' ? raw.product_type.trim() : '';
   return {
     externalId: String(raw.id),
     title: (raw.title as string) ?? '',
     imageUrl: (image?.src as string) ?? (images?.[0]?.src as string) ?? null,
+    productType: productType || null,
   };
 }
 

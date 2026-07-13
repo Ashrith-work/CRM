@@ -26,6 +26,7 @@ import {
 import { Card, PageHeader, Button, Spinner, ErrorPanel, formatDate, formatMoney } from '@/components/crm/ui';
 import { MetricGrid } from '@/components/crm/MetricTile';
 import { InfoTooltip } from '@/components/crm/InfoTooltip';
+import { CommerceKpis } from '@/components/crm/CommerceKpis';
 import { EmptyState } from '@/components/crm/EmptyState';
 
 // ----- "Build segment from this" → M3's segment builder, pre-filled ---------
@@ -154,6 +155,10 @@ export default function AnalyticsPage() {
         }
       />
       {note && <p className="text-sm text-amber-600 dark:text-amber-400">{note}</p>}
+
+      {/* P2.1 — period-scoped commerce KPI tiles (revenue/orders/retention/discounts),
+          computed from the ingested Shopify data with previous-period deltas. */}
+      <CommerceKpis getToken={getToken} />
 
       {status === 'loading' ? (
         <Spinner />

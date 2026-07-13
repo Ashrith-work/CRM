@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PeriodPresetSchema, ResolvedPeriodSchema } from './dashboard';
 
 /**
  * Milestone 3 — RFM analytics + JSON rule-tree segmentation. Analytics are read
@@ -94,6 +95,81 @@ export const MarginResponseSchema = z.object({
   data: z.array(MarginPointSchema),
 });
 export type MarginResponse = z.infer<typeof MarginResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// P2.1 dashboard KPIs — commerce KPI tiles computed FROM the ingested Shopify
+// data (the commerce_kpi_daily materialized view + customer aggregates), NOT
+// re-fetched from Shopify. Period-scoped with a previous-period comparison.
+// Money is minor units; rates are [0,1] fractions (null when the denominator is
+// zero). Each metric's `key` is a glossary metricKey that drives its tooltip.
+// ---------------------------------------------------------------------------
+export const KPI_UNITS = ['money', 'count', 'rate', 'ratio'] as const;
+export const KpiUnitSchema = z.enum(KPI_UNITS);
+export type KpiUnit = z.infer<typeof KpiUnitSchema>;
+
+export const KpiMetricSchema = z.object({
+  /** Glossary metricKey — resolves the info-tooltip definition. */
+  key: z.string(),
+  label: z.string(),
+  unit: KpiUnitSchema,
+  /** minor units (money) | count | fraction [0,1] (rate) | decimal (ratio). null = no data. */
+  value: z.number().nullable(),
+  /** Same-shape value for the previous period; null when not comparable. */
+  previous: z.number().nullable(),
+  /** True when LOWER is better (e.g. refund rate) → inverts the delta color. */
+  betterWhenLower: z.boolean(),
+});
+export type KpiMetric = z.infer<typeof KpiMetricSchema>;
+
+export const KpiTrendPointSchema = z.object({
+  start: z.string(),
+  end: z.string(),
+  netRevenueMinor: z.number().int(),
+  orderCount: z.number().int(),
+  newCustomers: z.number().int(),
+});
+export type KpiTrendPoint = z.infer<typeof KpiTrendPointSchema>;
+
+export const KpiTopProductSchema = z.object({
+  productId: z.string().nullable(),
+  title: z.string(),
+  revenueMinor: z.number().int(),
+  units: z.number().int(),
+});
+export type KpiTopProduct = z.infer<typeof KpiTopProductSchema>;
+
+export const KpiTopCategorySchema = z.object({
+  /** Shopify product_type; "Uncategorized" when the product has none. */
+  category: z.string(),
+  revenueMinor: z.number().int(),
+  units: z.number().int(),
+});
+export type KpiTopCategory = z.infer<typeof KpiTopCategorySchema>;
+
+export const KpiResponseSchema = z.object({
+  period: ResolvedPeriodSchema,
+  previousPeriod: z.object({ start: z.string(), end: z.string() }),
+  currency: z.string().nullable(),
+  /** When the underlying Shopify data was last synced (Integration.lastSyncedAt). */
+  lastSyncedAt: z.string().nullable(),
+  /** Ordered for the tile row. */
+  metrics: z.array(KpiMetricSchema),
+  /** Revenue / orders / new-customers over time (bucketed for the trend chart). */
+  trend: z.array(KpiTrendPointSchema),
+  topProducts: z.array(KpiTopProductSchema),
+  topCategories: z.array(KpiTopCategorySchema),
+});
+export type KpiResponse = z.infer<typeof KpiResponseSchema>;
+
+export const KpiQueryInput = z.object({
+  period: PeriodPresetSchema.optional().default('month'),
+  /** For period=custom: inclusive local dates (YYYY-MM-DD). */
+  from: z.string().optional(),
+  to: z.string().optional(),
+  /** Trend bucket granularity; auto-picked from the window when omitted. */
+  interval: z.enum(['day', 'week', 'month']).optional(),
+});
+export type KpiQueryInput = z.infer<typeof KpiQueryInput>;
 
 // ---------------------------------------------------------------------------
 // Segment rule tree (whitelisted fields + ops; translated to a SAFE query).

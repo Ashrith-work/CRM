@@ -31,9 +31,9 @@ export class RfmRefreshService {
     await this.refreshOne('customer_rfm');
   }
 
-  /** Refresh the P2.1 analytics views (revenue/cohort/clv/margin). */
+  /** Refresh the P2.1 analytics views (revenue/cohort/clv/margin + KPI rollup). */
   async refreshAnalyticsViews(): Promise<void> {
-    for (const view of ['revenue_daily', 'cohort_retention', 'customer_clv', 'contribution_margin']) {
+    for (const view of ['revenue_daily', 'cohort_retention', 'customer_clv', 'contribution_margin', 'commerce_kpi_daily']) {
       await this.refreshOne(view);
     }
   }
