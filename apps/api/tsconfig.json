@@ -5,5 +5,7 @@
     "baseUrl": "./"
   },
   "include": ["src/**/*.ts", "prisma/**/*.ts", "test/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  // prisma/ops are standalone tsx scripts (ESM import.meta) — run via tsx, not
+  // part of the Nest CJS build/typecheck.
+  "exclude": ["node_modules", "dist", "prisma/ops"]
 }
