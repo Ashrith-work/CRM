@@ -2,15 +2,23 @@ import { Body, Controller, Get, NotFoundException, Param, Post, Query, Res } fro
 import type { Response } from 'express';
 import { z } from 'zod';
 import {
+  AddEscalationInput,
   CustomerListQueryInput,
+  LookupQueryInput,
   PERMISSIONS,
   RecentOrdersQueryInput,
+  SuggestQueryInput,
   TimelineQueryInput,
   type Customer360,
   type CustomerListResponse,
+  type EscalationListResponse,
+  type EscalationSummaryDto,
   type ExportAsyncResponse,
   type ExportStatusResponse,
+  type LookupResponse,
+  type PurchaseProfile,
   type RecentOrdersResponse,
+  type SuggestResponse,
   type TimelineResponse,
 } from '@crm/types';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -20,6 +28,8 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { canSeeUnmaskedPii } from '../common/pii.util';
 import { Customer360Service } from './customer360.service';
 import { ExperienceExportService } from './experience-export.service';
+import { PurchaseAnalysisService } from './purchase-analysis.service';
+import { EscalationService } from './escalation.service';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const SegmentExportInput = z.object({ customerIds: z.array(z.string().min(1)).min(1).max(5000) });
@@ -29,7 +39,29 @@ export class Customer360Controller {
   constructor(
     private readonly customers: Customer360Service,
     private readonly exports: ExperienceExportService,
+    private readonly purchase: PurchaseAnalysisService,
+    private readonly escalations: EscalationService,
   ) {}
+
+  // ----- Purchase Analysis: typeahead + lookup (STATIC routes, declared before
+  // ':id' so they are matched first). --------------------------------------
+  @Get('suggest')
+  @RequirePermission(PERMISSIONS.COMMERCE_READ)
+  async suggest(
+    @CurrentUser() ctx: UserContext,
+    @Query(new ZodValidationPipe(SuggestQueryInput)) query: SuggestQueryInput,
+  ): Promise<SuggestResponse> {
+    return { data: await this.purchase.suggest(ctx.organization.id, query.q, canSeeUnmaskedPii(ctx.permissions), query.limit) };
+  }
+
+  @Get('lookup')
+  @RequirePermission(PERMISSIONS.COMMERCE_READ)
+  async lookup(
+    @CurrentUser() ctx: UserContext,
+    @Query(new ZodValidationPipe(LookupQueryInput)) query: LookupQueryInput,
+  ): Promise<LookupResponse> {
+    return this.purchase.lookup(ctx.organization.id, query.q, canSeeUnmaskedPii(ctx.permissions));
+  }
 
   @Get()
   @RequirePermission(PERMISSIONS.COMMERCE_READ)
@@ -79,6 +111,29 @@ export class Customer360Controller {
     @Query(new ZodValidationPipe(RecentOrdersQueryInput)) query: RecentOrdersQueryInput,
   ): Promise<RecentOrdersResponse> {
     return { data: await this.customers.recentOrders(ctx.organization.id, id, query) };
+  }
+
+  // ----- Purchase Analysis: profile (last + 2nd-last) + escalations --------
+  @Get(':id/purchase-profile')
+  @RequirePermission(PERMISSIONS.COMMERCE_READ)
+  async purchaseProfile(@CurrentUser() ctx: UserContext, @Param('id') id: string): Promise<PurchaseProfile> {
+    return this.purchase.profile(ctx.organization.id, id, canSeeUnmaskedPii(ctx.permissions), ctx.user.id);
+  }
+
+  @Get(':id/escalations')
+  @RequirePermission(PERMISSIONS.COMMERCE_READ)
+  async listEscalations(@CurrentUser() ctx: UserContext, @Param('id') id: string): Promise<EscalationListResponse> {
+    return { data: await this.escalations.list(ctx.organization.id, id) };
+  }
+
+  @Post(':id/escalations')
+  @RequirePermission(PERMISSIONS.COMMERCE_READ)
+  async addEscalation(
+    @CurrentUser() ctx: UserContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(AddEscalationInput)) body: AddEscalationInput,
+  ): Promise<EscalationSummaryDto> {
+    return this.escalations.add(ctx.organization.id, id, body, ctx.user.id);
   }
 
   /** Sync single-customer export — streams the .xlsx (masked unless pii:read). */

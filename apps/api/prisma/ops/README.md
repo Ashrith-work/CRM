@@ -19,6 +19,7 @@ seed so the CRM shows only real Shopify data.
 | `deseed.ts` | DB (txn) | no | Deletes ONLY non-Shopify seed/demo rows; **dry-run by default**, `--apply` to execute. Preserves all real Shopify data, the real admin + RBAC, Integration rows, MARKETING consents, and real guest customers. Writes an `AuditLog` (`action=deseed.commerce-only`). |
 | `verify.ts` | no | no | Asserts only-real invariants (PASS/FAIL) + revenue sanity. |
 | `backfill-product-type.ts` | DB only | Shopify reads only | Backfills `Product.productType` from Shopify `product_type` (for top-categories analytics). Batches each page into one transaction; retries on connection drops. |
+| `backfill-product-tags.ts` | DB only | Shopify reads only | Backfills `Product.tags` from Shopify product tags (for the Purchase Analysis "Fabrics" field). Same batched/retry pattern. |
 
 ## Why these exist / notes
 

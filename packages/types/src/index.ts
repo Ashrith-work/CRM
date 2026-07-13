@@ -18,6 +18,7 @@ export * from './ads';
 export * from './loyalty';
 export * from './incentives';
 export * from './recovery';
+export * from './purchase-analysis';
 
 /** Shared API constants so clients never hardcode the version prefix. */
 export const API_PREFIX = 'api/v1';

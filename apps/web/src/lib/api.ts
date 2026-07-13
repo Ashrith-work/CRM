@@ -188,6 +188,17 @@ import {
   KpiResponseSchema,
   type KpiResponse,
   type KpiQueryInput,
+  SuggestResponseSchema,
+  LookupResponseSchema,
+  PurchaseProfileSchema,
+  EscalationListResponseSchema,
+  EscalationSummaryDtoSchema,
+  type SuggestResponse,
+  type LookupResponse,
+  type PurchaseProfile,
+  type EscalationListResponse,
+  type EscalationSummaryDto,
+  type AddEscalationInput,
   SegmentSchema,
   SegmentListResponseSchema,
   SegmentMembersResponseSchema,
@@ -754,6 +765,23 @@ export function mergeCustomers(getToken: TokenGetter, body: MergeCustomersInput)
 export type CustomerListParams = { cursor?: string; limit?: number; search?: string; sort?: string; order?: 'asc' | 'desc' };
 export function listCustomers(getToken: TokenGetter, params: CustomerListParams = {}): Promise<CustomerListResponse> {
   return request(getToken, `${API_ROUTES.customers}${qs(params)}`, CustomerListResponseSchema);
+}
+
+// ----- Purchase Analysis Dashboard --------------------------------------------
+export function suggestCustomers(getToken: TokenGetter, q: string, limit = 8): Promise<SuggestResponse> {
+  return request(getToken, `${API_ROUTES.customers}/suggest${qs({ q, limit })}`, SuggestResponseSchema);
+}
+export function lookupCustomer(getToken: TokenGetter, q: string): Promise<LookupResponse> {
+  return request(getToken, `${API_ROUTES.customers}/lookup${qs({ q })}`, LookupResponseSchema);
+}
+export function getPurchaseProfile(getToken: TokenGetter, id: string): Promise<PurchaseProfile> {
+  return request(getToken, `${API_ROUTES.customers}/${id}/purchase-profile`, PurchaseProfileSchema);
+}
+export function listEscalations(getToken: TokenGetter, id: string): Promise<EscalationListResponse> {
+  return request(getToken, `${API_ROUTES.customers}/${id}/escalations`, EscalationListResponseSchema);
+}
+export function addEscalation(getToken: TokenGetter, id: string, body: AddEscalationInput): Promise<EscalationSummaryDto> {
+  return request(getToken, `${API_ROUTES.customers}/${id}/escalations`, EscalationSummaryDtoSchema, { method: 'POST', body: JSON.stringify(body) });
 }
 export function getCustomer360(getToken: TokenGetter, id: string): Promise<Customer360> {
   return request(getToken, `${API_ROUTES.customers}/${id}`, Customer360Schema);

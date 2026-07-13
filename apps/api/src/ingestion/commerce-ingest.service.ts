@@ -44,8 +44,8 @@ export class CommerceIngestService {
   async upsertProduct(organizationId: string, p: MappedProduct): Promise<string> {
     const row = await this.prisma.product.upsert({
       where: { organizationId_externalId: { organizationId, externalId: p.externalId } },
-      update: { title: p.title, imageUrl: p.imageUrl, productType: p.productType, deletedAt: null },
-      create: { organizationId, externalId: p.externalId, title: p.title, imageUrl: p.imageUrl, productType: p.productType },
+      update: { title: p.title, imageUrl: p.imageUrl, productType: p.productType, tags: p.tags, deletedAt: null },
+      create: { organizationId, externalId: p.externalId, title: p.title, imageUrl: p.imageUrl, productType: p.productType, tags: p.tags },
     });
     return row.id;
   }

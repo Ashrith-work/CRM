@@ -35,6 +35,7 @@ const NAV_GROUPS: Array<{ label: string; items: Array<{ href: string; label: str
   {
     label: 'Support',
     items: [
+      { href: '/dashboard/purchase-analysis', label: 'Purchase Analysis' },
       { href: '/dashboard/calls', label: 'Calls' },
       { href: '/dashboard/notifications', label: 'Notifications' },
     ],

@@ -110,6 +110,9 @@ model Organization {
   progressUpdates           ProgressUpdate[]
   customerAssignmentHistory CustomerAssignmentHistory[]
 
+  // Purchase Analysis Dashboard — human escalation summaries (the one NEW dataset).
+  escalationSummaries       EscalationSummary[]
+
   @@index([slug])
 }
 
@@ -270,6 +273,8 @@ model Product {
   imageUrl       String?
   /** Shopify product_type — the category used for top-categories analytics. */
   productType    String?
+  /** Shopify product tags (e.g. fabric labels). Read for the "Fabrics" field; never fabricated. */
+  tags           String[]  @default([])
   /** P2.1 — per-unit COGS (paise) for real contribution margin; null ⇒ estimate. */
   costMinor      Int?
   createdAt      DateTime  @default(now())
@@ -492,6 +497,35 @@ model ExperienceExport {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
+}
+
+/** Human follow-up status for a purchase-analysis escalation. */
+enum EscalationStatus {
+  OPEN
+  RESOLVED
+}
+
+/**
+ * Purchase Analysis Dashboard — a human ESCALATION note about a customer
+ * (optionally tied to a specific order). The ONE new dataset: Shopify has no
+ * escalations. Each add also emits an Interaction (timeline) + an AuditLog.
+ * authorUserId is a soft scalar ref to User.id (matching the CRM convention).
+ */
+model EscalationSummary {
+  id             String            @id @default(cuid())
+  organizationId String
+  customerId     String
+  /** Optional link to the specific order the escalation is about. */
+  orderId        String?
+  /** Free text. Stored raw for the RBAC-gated panel; PII-scrubbed before any AI use. */
+  note           String
+  status         EscalationStatus?
+  authorUserId   String
+  createdAt      DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, customerId, createdAt])
 }
 
 // ============================================================================

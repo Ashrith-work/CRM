@@ -7,6 +7,8 @@ import { Customer360Service } from './customer360.service';
 import { Customer360Controller } from './customer360.controller';
 import { ExperienceExportService } from './experience-export.service';
 import { ExportProcessor } from './export.processor';
+import { PurchaseAnalysisService } from './purchase-analysis.service';
+import { EscalationService } from './escalation.service';
 import { EXPORT_QUEUE } from './export.constants';
 
 /**
@@ -16,7 +18,7 @@ import { EXPORT_QUEUE } from './export.constants';
 @Module({
   imports: [BullModule.registerQueue({ name: EXPORT_QUEUE })],
   controllers: [CustomersController, Customer360Controller],
-  providers: [IdentityService, AiSafeCustomerRepository, Customer360Service, ExperienceExportService, ExportProcessor],
+  providers: [IdentityService, AiSafeCustomerRepository, Customer360Service, ExperienceExportService, ExportProcessor, PurchaseAnalysisService, EscalationService],
   exports: [IdentityService, AiSafeCustomerRepository],
 })
 export class CustomersModule {}

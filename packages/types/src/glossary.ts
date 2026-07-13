@@ -254,6 +254,22 @@ export const GLOSSARY_REGISTRY: Record<string, GlossaryEntry> = {
     dataWindow: 'selected period (org timezone)',
     lastSynced: SYNCED_KPI,
   },
+
+  // Purchase Analysis Dashboard.
+  discount_pct: {
+    metricKey: 'discount_pct',
+    plainLanguage: 'How large the order discount was, as a share of the pre-discount subtotal.',
+    formula: 'order.discountMinor ÷ Σ(orderItem.priceMinor × quantity)',
+    dataWindow: 'per order',
+    lastSynced: SYNCED_KPI,
+  },
+  fabrics: {
+    metricKey: 'fabrics',
+    plainLanguage: 'Fabric labels read from the order products\' Shopify tags (e.g. Silk, Cotton). Shown only when a fabric tag is present — never inferred or fabricated.',
+    formula: 'product tags matching a fabric vocabulary; blank when none match',
+    dataWindow: 'per order',
+    lastSynced: SYNCED_KPI,
+  },
 };
 
 /** Resolve a metric's glossary entry, or null if unknown. */

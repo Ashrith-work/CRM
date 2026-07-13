@@ -56,6 +56,8 @@ export interface MappedProduct {
   imageUrl: string | null;
   /** Shopify product_type — the category for top-categories analytics. */
   productType: string | null;
+  /** Shopify product tags (split from the comma-separated string). */
+  tags: string[];
 }
 
 export function mapProduct(raw: Raw): MappedProduct {
@@ -67,7 +69,14 @@ export function mapProduct(raw: Raw): MappedProduct {
     title: (raw.title as string) ?? '',
     imageUrl: (image?.src as string) ?? (images?.[0]?.src as string) ?? null,
     productType: productType || null,
+    tags: parseTags(raw.tags),
   };
+}
+
+/** Shopify returns tags as a comma-separated string (or sometimes an array). */
+export function parseTags(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw.map(String) : typeof raw === 'string' ? raw.split(',') : [];
+  return [...new Set(list.map((t) => t.trim()).filter(Boolean))];
 }
 
 export interface MappedLineItem {
