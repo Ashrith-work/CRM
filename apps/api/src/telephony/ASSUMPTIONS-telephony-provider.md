@@ -1,4 +1,18 @@
-# Telephony: swap-able provider (Exotel + MyOperator) · Assumptions & Notes
+# Telephony: swap-able provider (Mock + MyOperator + Exotel) · Assumptions & Notes
+
+> **Update (mock-first + resilience).** A first-class `MockTelephonyProvider`
+> (`mock.service.ts` + `mock.fixtures.ts`) was added and `TELEPHONY_PROVIDER` now
+> **defaults to `mock`** — the whole pipeline runs from fixtures with no account,
+> and going live is the one-line switch to `myoperator` (see
+> `HOW-TO-CONNECT-MYOPERATOR.md`). Also added: a self-healing HTTP layer
+> (`http.util.ts` — retry+backoff+jitter, refresh-once on auth, typed
+> `TelephonyAuthError`/`TelephonyConfigError`), a reconciliation sweep for MISSED
+> webhooks (`calls/call-reconcile.processor.ts`), un-recoverable-error surfacing
+> onto the Integration row (`telephony-status.service.ts`), and telephony
+> connectivity in `GET /health`. The interface gained `fetchRecentCalls` +
+> `healthCheck` (implemented by all three adapters). Everything below still holds.
+
+
 
 ## Scope: M5 already existed — this fills the provider-abstraction gap
 Reconnaissance found **M5 call management is fully built** (Call model, consent

@@ -53,6 +53,7 @@ function makeService(opts: {
     { statusForMany: jest.fn().mockResolvedValue(new Map()) } as unknown as ConsentService,
     myoperator,
     { enqueueFetch } as unknown as RecordingsService,
+    { recordError: jest.fn(), recordHealthy: jest.fn() } as unknown as import('../telephony/telephony-status.service').TelephonyStatusService,
   );
   return { service, prisma, upsert, emit, enqueueFetch, myoperator };
 }

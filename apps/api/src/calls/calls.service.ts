@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConsentService } from '../consents/consent.service';
 import { TELEPHONY_PROVIDER, type NormalizedCallEvent, type TelephonyProvider } from '../telephony/telephony.provider';
+import { TelephonyStatusService, classifyTelephonyError } from '../telephony/telephony-status.service';
 import { RecordingsService } from '../recordings/recordings.service';
 import { resolveActors } from '../common/actors.util';
 import { matchContactByNumber, nationalNumber, normalizeE164 } from '../common/phone.util';
@@ -31,6 +32,7 @@ export class CallsService {
     private readonly consents: ConsentService,
     @Inject(TELEPHONY_PROVIDER) private readonly provider: TelephonyProvider,
     private readonly recordings: RecordingsService,
+    private readonly telephonyStatus: TelephonyStatusService,
   ) {}
 
   // ----- Outbound click-to-call -------------------------------------------
@@ -45,7 +47,7 @@ export class CallsService {
     if (input.dealId) await this.assertDeal(organizationId, input.dealId);
 
     const agentNumber = this.provider.callerId() ?? 'agent';
-    const { externalCallId } = await this.provider.clickToCall({ agentNumber, customerNumber: customer });
+    const { externalCallId } = await this.dialWithSurfacing(organizationId, { agentNumber, customerNumber: customer });
 
     const call = await this.prisma.call.create({
       data: {
@@ -264,6 +266,29 @@ export class CallsService {
   }
 
   // ----- Helpers ----------------------------------------------------------
+  /**
+   * Dial via the active provider. Recoverable failures (transient/5xx, expired
+   * auth) are already retried/refreshed inside the provider's HTTP wrapper. An
+   * un-recoverable auth/config error is surfaced onto the Integration row (with
+   * the reason) and re-thrown — never swallowed; a success clears any prior flag.
+   */
+  private async dialWithSurfacing(
+    organizationId: string,
+    params: { agentNumber: string; customerNumber: string },
+  ): Promise<{ externalCallId: string }> {
+    try {
+      const result = await this.provider.clickToCall(params);
+      await this.telephonyStatus.recordHealthy(organizationId, this.provider.id);
+      return result;
+    } catch (err) {
+      const classified = classifyTelephonyError(err);
+      if (classified) {
+        await this.telephonyStatus.recordError(organizationId, this.provider.id, classified.kind, classified.reason);
+      }
+      throw err;
+    }
+  }
+
   private async resolveOrg(companyId: string | null, externalCallId: string): Promise<string | null> {
     if (companyId) {
       // Map by the provider's account id (MyOperator company id OR Exotel SID).

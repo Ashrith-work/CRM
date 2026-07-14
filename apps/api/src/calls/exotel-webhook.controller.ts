@@ -3,6 +3,7 @@ import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
 import { Public } from '../auth/public.decorator';
 import { ExotelService } from '../telephony/exotel.service';
+import { TelephonyStatusService } from '../telephony/telephony-status.service';
 import { CallsService } from './calls.service';
 
 /**
@@ -17,6 +18,7 @@ export class ExotelWebhookController {
   constructor(
     private readonly calls: CallsService,
     private readonly exotel: ExotelService,
+    private readonly status: TelephonyStatusService,
   ) {}
 
   @Post('exotel')
@@ -29,6 +31,9 @@ export class ExotelWebhookController {
   ): Promise<{ received: boolean; callId: string | null }> {
     const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(body);
     if (!this.exotel.verifySignature(raw, signature)) {
+      // Exotel callbacks don't echo the account SID; use the configured one so the
+      // org can still be resolved for surfacing.
+      await this.status.recordWebhookSignatureMismatch('exotel', this.exotel.parseEvent(body).companyId);
       throw new UnauthorizedException('Invalid webhook signature');
     }
     if (!this.exotel.webhookSecretConfigured()) {

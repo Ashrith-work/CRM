@@ -3,7 +3,10 @@ import type { CallDirection, CallStatus } from '@crm/types';
 /** DI token for the ACTIVE telephony provider (selected by TELEPHONY_PROVIDER). */
 export const TELEPHONY_PROVIDER = Symbol('TELEPHONY_PROVIDER');
 
-export type TelephonyProviderId = 'myoperator' | 'exotel';
+export type TelephonyProviderId = 'mock' | 'myoperator' | 'exotel';
+
+/** Provider connectivity as reported to the health check. */
+export type ProviderHealth = 'up' | 'down' | 'not_configured';
 
 export interface ClickToCallParams {
   agentNumber: string;
@@ -54,6 +57,14 @@ export interface TelephonyProvider {
   parseEvent(payload: unknown): NormalizedCallEvent;
   /** Download a recording; the caller enforces the size guard. */
   downloadRecording(url: string): Promise<DownloadedRecording>;
+  /**
+   * List recent calls from the provider (normalized). The reconciliation sweep
+   * uses this to recover MISSED webhooks — re-pulling recent calls and filling
+   * any gaps idempotently. Returns [] in MOCK mode with nothing staged.
+   */
+  fetchRecentCalls(since: Date): Promise<NormalizedCallEvent[]>;
+  /** Lightweight connectivity/configuration report for the health check. */
+  healthCheck(): Promise<ProviderHealth>;
 }
 
 export type { CallDirection, CallStatus };

@@ -4,7 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import type { MyOperatorWebhook } from '@crm/types';
 import type { Env } from '../config/env';
 import { mapDirection, mapStatus, parseTime } from './normalize.util';
-import type { ClickToCallParams, DownloadedRecording, NormalizedCallEvent, TelephonyProvider } from './telephony.provider';
+import { fetchWithResilience } from './http.util';
+import type { ClickToCallParams, DownloadedRecording, NormalizedCallEvent, ProviderHealth, TelephonyProvider } from './telephony.provider';
 
 // Re-export the shared shapes so existing importers of this module keep working.
 export type { ClickToCallParams, DownloadedRecording, NormalizedCallEvent } from './telephony.provider';
@@ -38,20 +39,23 @@ export class MyOperatorService implements TelephonyProvider {
       this.logger.log(`[mock] click-to-call ${params.agentNumber} → ${params.customerNumber} (${externalCallId})`);
       return { externalCallId };
     }
-    const res = await fetch(`${this.config.get('MYOPERATOR_API_URL', { infer: true })}/obd/click2call`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': this.config.get('MYOPERATOR_API_TOKEN', { infer: true }) as string,
-      },
-      body: JSON.stringify({
-        company_id: this.config.get('MYOPERATOR_COMPANY_ID', { infer: true }),
-        agent_number: params.agentNumber,
-        customer_number: params.customerNumber,
-        caller_id: this.config.get('MYOPERATOR_CALLER_ID', { infer: true }),
-      }),
-    });
-    if (!res.ok) throw new Error(`MyOperator click-to-call failed: ${res.status} ${await res.text().catch(() => '')}`);
+    const res = await fetchWithResilience(
+      () =>
+        fetch(`${this.config.get('MYOPERATOR_API_URL', { infer: true })}/obd/click2call`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-KEY': this.config.get('MYOPERATOR_API_TOKEN', { infer: true }) as string,
+          },
+          body: JSON.stringify({
+            company_id: this.config.get('MYOPERATOR_COMPANY_ID', { infer: true }),
+            agent_number: params.agentNumber,
+            customer_number: params.customerNumber,
+            caller_id: this.config.get('MYOPERATOR_CALLER_ID', { infer: true }),
+          }),
+        }),
+      { label: 'MyOperator click-to-call', refreshAuth: () => this.onAuthRefresh() },
+    );
     const json = (await res.json()) as { call_id?: string; data?: { call_id?: string; uuid?: string } };
     const externalCallId = json.call_id ?? json.data?.call_id ?? json.data?.uuid;
     if (!externalCallId) throw new Error('MyOperator click-to-call returned no call id');
@@ -99,16 +103,52 @@ export class MyOperatorService implements TelephonyProvider {
 
   /** Download a recording from the provider; caller enforces the size guard. */
   async downloadRecording(url: string): Promise<DownloadedRecording> {
-    const headers: Record<string, string> = {};
-    const token = this.config.get('MYOPERATOR_API_TOKEN', { infer: true });
-    if (token) headers['X-API-KEY'] = token;
-    const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error(`Recording download failed: ${res.status}`);
+    const res = await fetchWithResilience(
+      () => {
+        const headers: Record<string, string> = {};
+        const token = this.config.get('MYOPERATOR_API_TOKEN', { infer: true });
+        if (token) headers['X-API-KEY'] = token;
+        return fetch(url, { headers });
+      },
+      { label: 'MyOperator recording download', refreshAuth: () => this.onAuthRefresh() },
+    );
     const buffer = Buffer.from(await res.arrayBuffer());
     return {
       buffer,
       contentType: res.headers.get('content-type') ?? 'audio/mpeg',
       sizeBytes: buffer.byteLength,
     };
+  }
+
+  /**
+   * Pull recent calls from MyOperator's call report so the reconciliation sweep
+   * can fill any MISSED webhooks. MOCK mode (no token) has nothing to pull.
+   */
+  async fetchRecentCalls(since: Date): Promise<NormalizedCallEvent[]> {
+    if (this.isMock()) return [];
+    const base = this.config.get('MYOPERATOR_API_URL', { infer: true });
+    const companyId = this.config.get('MYOPERATOR_COMPANY_ID', { infer: true }) ?? '';
+    const url = `${base}/report/call?company_id=${encodeURIComponent(companyId)}&from=${Math.floor(since.getTime() / 1000)}`;
+    const res = await fetchWithResilience(
+      () => fetch(url, { headers: { 'X-API-KEY': this.config.get('MYOPERATOR_API_TOKEN', { infer: true }) as string } }),
+      { label: 'MyOperator call report', refreshAuth: () => this.onAuthRefresh() },
+    );
+    const json = (await res.json().catch(() => ({}))) as { data?: unknown[] };
+    const rows = Array.isArray(json.data) ? json.data : [];
+    return rows.map((row) => this.parseEvent(row));
+  }
+
+  /** mock (unconfigured) → not_configured; configured → up (a deeper ping is a follow-up). */
+  async healthCheck(): Promise<ProviderHealth> {
+    return this.isMock() ? 'not_configured' : 'up';
+  }
+
+  /**
+   * Re-read credentials on a 401/403 (the single refresh-and-retry hook). The
+   * static API token is read fresh from config on each attempt, so this is the
+   * seam a future OAuth/token-rotation flow drops into.
+   */
+  private onAuthRefresh(): void {
+    this.logger.warn('MyOperator auth failed — re-reading credentials and retrying once');
   }
 }

@@ -51,6 +51,8 @@ export const HealthResponseSchema = z.object({
   services: z.object({
     database: z.enum(['up', 'down']),
     redis: z.enum(['up', 'down']),
+    /** Active telephony provider connectivity. Optional for backward-compat. */
+    telephony: z.enum(['up', 'down', 'not_configured']).optional(),
   }),
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;

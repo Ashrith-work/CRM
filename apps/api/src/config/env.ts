@@ -49,9 +49,21 @@ const envSchema = z.object({
   EXPO_ACCESS_TOKEN: z.string().optional(),
 
   // Milestone 5 — telephony + recording storage (Cloudinary). The active provider
-  // is swap-able: 'myoperator' (default) or 'exotel'. Each provider's webhook
-  // route parses with its own adapter; the active one does outbound + downloads.
-  TELEPHONY_PROVIDER: z.enum(['myoperator', 'exotel']).default('myoperator'),
+  // is swap-able and defaults to 'mock' — the whole pipeline runs with NO account.
+  // Going live is the one-line switch to 'myoperator' (+ credentials); 'exotel' is
+  // also supported. Each provider's webhook route parses with its own adapter; the
+  // active one does outbound + downloads + reconciliation pulls.
+  TELEPHONY_PROVIDER: z.enum(['mock', 'myoperator', 'exotel']).default('mock'),
+  /** How often the reconciliation sweep re-pulls recent calls to fill MISSED
+   * webhooks (ms). Default 5 min. */
+  TELEPHONY_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(10_000).default(5 * 60 * 1000),
+
+  // Mock provider (default). No real dialing; simulates events from fixtures.
+  /** HMAC secret the mock verifies webhooks against (so signature tests run on
+   * the mock). Unset ⇒ dev-lenient (accepts unverified). */
+  MOCK_WEBHOOK_SECRET: z.string().default('mock-webhook-secret'),
+  /** The mock's caller-id / DID for outbound. */
+  MOCK_CALLER_ID: z.string().default('+911100000000'),
 
   // Exotel — unset ⇒ MOCK mode (no real dialing). Click-to-call uses HTTP Basic
   // auth (EXOTEL_API_KEY:EXOTEL_API_TOKEN); org mapping via EXOTEL_ACCOUNT_SID.

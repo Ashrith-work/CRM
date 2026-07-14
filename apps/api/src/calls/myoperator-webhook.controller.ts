@@ -14,6 +14,7 @@ import { MyOperatorWebhookSchema, type MyOperatorWebhook } from '@crm/types';
 import { Public } from '../auth/public.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { MyOperatorService } from '../telephony/myoperator.service';
+import { TelephonyStatusService } from '../telephony/telephony-status.service';
 import { CallsService } from './calls.service';
 
 /**
@@ -28,6 +29,7 @@ export class MyOperatorWebhookController {
   constructor(
     private readonly calls: CallsService,
     private readonly myoperator: MyOperatorService,
+    private readonly status: TelephonyStatusService,
   ) {}
 
   @Post('myoperator')
@@ -40,6 +42,7 @@ export class MyOperatorWebhookController {
   ): Promise<{ received: boolean; callId: string | null }> {
     const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(body);
     if (!this.myoperator.verifySignature(raw, signature)) {
+      await this.status.recordWebhookSignatureMismatch('myoperator', body.company_id ?? null);
       throw new UnauthorizedException('Invalid webhook signature');
     }
     if (!this.myoperator.webhookSecretConfigured()) {

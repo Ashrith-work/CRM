@@ -3,7 +3,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
 import { mapDirection, mapStatus, parseTime } from './normalize.util';
-import type { ClickToCallParams, DownloadedRecording, NormalizedCallEvent, TelephonyProvider } from './telephony.provider';
+import { fetchWithResilience } from './http.util';
+import type { ClickToCallParams, DownloadedRecording, NormalizedCallEvent, ProviderHealth, TelephonyProvider } from './telephony.provider';
 
 type Raw = Record<string, unknown>;
 const str = (v: unknown): string | undefined => (v == null ? undefined : String(v));
@@ -48,12 +49,15 @@ export class ExotelService implements TelephonyProvider {
       To: params.customerNumber,
       CallerId: this.callerId() ?? '',
     });
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: this.authHeader(), 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form,
-    });
-    if (!res.ok) throw new Error(`Exotel connect failed: ${res.status} ${await res.text().catch(() => '')}`);
+    const res = await fetchWithResilience(
+      () =>
+        fetch(url, {
+          method: 'POST',
+          headers: { Authorization: this.authHeader(), 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: form,
+        }),
+      { label: 'Exotel connect', refreshAuth: () => this.onAuthRefresh() },
+    );
     const json = (await res.json()) as { Call?: { Sid?: string } };
     const externalCallId = json.Call?.Sid;
     if (!externalCallId) throw new Error('Exotel connect returned no Call Sid');
@@ -103,11 +107,42 @@ export class ExotelService implements TelephonyProvider {
   }
 
   async downloadRecording(url: string): Promise<DownloadedRecording> {
-    const headers: Record<string, string> = {};
-    if (!this.isMock()) headers.Authorization = this.authHeader();
-    const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error(`Recording download failed: ${res.status}`);
+    const res = await fetchWithResilience(
+      () => {
+        const headers: Record<string, string> = {};
+        if (!this.isMock()) headers.Authorization = this.authHeader();
+        return fetch(url, { headers });
+      },
+      { label: 'Exotel recording download', refreshAuth: () => this.onAuthRefresh() },
+    );
     const buffer = Buffer.from(await res.arrayBuffer());
     return { buffer, contentType: res.headers.get('content-type') ?? 'audio/mpeg', sizeBytes: buffer.byteLength };
+  }
+
+  /**
+   * Pull recent calls from Exotel's Calls list so the reconciliation sweep can
+   * fill any MISSED webhooks. MOCK mode (no creds) has nothing to pull.
+   */
+  async fetchRecentCalls(since: Date): Promise<NormalizedCallEvent[]> {
+    if (this.isMock()) return [];
+    const sid = this.config.get('EXOTEL_ACCOUNT_SID', { infer: true });
+    const after = new Date(since.getTime()).toISOString().slice(0, 19).replace('T', ' ');
+    const url = `${this.config.get('EXOTEL_API_URL', { infer: true })}/v1/Accounts/${sid}/Calls.json?DateCreated=gte:${encodeURIComponent(after)}`;
+    const res = await fetchWithResilience(
+      () => fetch(url, { headers: { Authorization: this.authHeader() } }),
+      { label: 'Exotel calls list', refreshAuth: () => this.onAuthRefresh() },
+    );
+    const json = (await res.json().catch(() => ({}))) as { Calls?: unknown[] };
+    const rows = Array.isArray(json.Calls) ? json.Calls : [];
+    return rows.map((row) => this.parseEvent(row));
+  }
+
+  /** mock (unconfigured) → not_configured; configured → up. */
+  async healthCheck(): Promise<ProviderHealth> {
+    return this.isMock() ? 'not_configured' : 'up';
+  }
+
+  private onAuthRefresh(): void {
+    this.logger.warn('Exotel auth failed — re-reading credentials and retrying once');
   }
 }
